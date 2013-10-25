@@ -1,0 +1,84 @@
+From: Baruch Siach <baruch@tkos.co.il>
+Date: Fri, 25 Oct 2013 08:57:40 +0300
+Subject: sigaction: fix for THREADS_NATIVE
+
+Commit 9c4fce55a (nptl: remove sigaction, sigprocmask, and sigfillset from
+libpthread) removed pt-sigaction.c from the build to fix static build.
+However, since the libc sigaction is weak when HAS_THREADS is enabled, static
+build is not be affected. Tested for xtensa, x86, MIPS32 targets.
+
+Fixes nptl/tst-signal7.
+
+Moreover, commit 9193a76bb from the 0.9.33 branch has the right version.
+Ref.: http://patchwork.ozlabs.org/patch/286084/
+
+Cc: Austin Foxley <austinf@cetoncorp.com>
+Signed-off-by: Baruch Siach <baruch@tkos.co.il>
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+---
+ libpthread/nptl/sysdeps/pthread/Makefile.in | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libpthread/nptl/sysdeps/pthread/Makefile.in b/libpthread/nptl/sysdeps/pthread/Makefile.in
+--- a/libpthread/nptl/sysdeps/pthread/Makefile.in
++++ b/libpthread/nptl/sysdeps/pthread/Makefile.in
+@@ -33,6 +33,7 @@ libpthread_pthread_CSRC = \
+ 	pthread_spin_init.c \
+ 	pthread_spin_unlock.c \
+ 	pt-longjmp.c \
++	pt-sigaction.c \
+ 	tpp.c
+ 
+ CFLAGS-pthread_barrier_wait.c = -D_GNU_SOURCE
+diff --git a/libpthread/nptl/sysdeps/pthread/sigfillset.c b/libpthread/nptl/sysdeps/pthread/sigfillset.c
+deleted file mode 100644
+--- a/libpthread/nptl/sysdeps/pthread/sigfillset.c
++++ /dev/null
+@@ -1,20 +0,0 @@
+-/* Copyright (C) 2003, 2005 Free Software Foundation, Inc.
+-   This file is part of the GNU C Library.
+-
+-   The GNU C Library is free software; you can redistribute it and/or
+-   modify it under the terms of the GNU Lesser General Public
+-   License as published by the Free Software Foundation; either
+-   version 2.1 of the License, or (at your option) any later version.
+-
+-   The GNU C Library is distributed in the hope that it will be useful,
+-   but WITHOUT ANY WARRANTY; without even the implied warranty of
+-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+-   Lesser General Public License for more details.
+-
+-   You should have received a copy of the GNU Lesser General Public
+-   License along with the GNU C Library; if not, see
+-   <http://www.gnu.org/licenses/>.  */
+-
+-#include <pthreadP.h>
+-
+-#include <../../../../libc/signal/sigfillset.c>
+diff --git a/libpthread/nptl/sysdeps/pthread/sigprocmask.c b/libpthread/nptl/sysdeps/pthread/sigprocmask.c
+deleted file mode 100644
+--- a/libpthread/nptl/sysdeps/pthread/sigprocmask.c
++++ /dev/null
+@@ -1,21 +0,0 @@
+-/* Copyright (C) 1997,1998,1999,2000,2001,2003 Free Software Foundation, Inc.
+-   This file is part of the GNU C Library.
+-
+-   The GNU C Library is free software; you can redistribute it and/or
+-   modify it under the terms of the GNU Lesser General Public
+-   License as published by the Free Software Foundation; either
+-   version 2.1 of the License, or (at your option) any later version.
+-
+-   The GNU C Library is distributed in the hope that it will be useful,
+-   but WITHOUT ANY WARRANTY; without even the implied warranty of
+-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+-   Lesser General Public License for more details.
+-
+-   You should have received a copy of the GNU Lesser General Public
+-   License along with the GNU C Library; if not, see
+-   <http://www.gnu.org/licenses/>.  */
+-
+-#include <pthreadP.h>
+-#undef _LARGEFILE64_SOURCE
+-
+-#include <../../../../libc/sysdeps/linux/common/sigprocmask.c>
+-- 

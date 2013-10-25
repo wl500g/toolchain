@@ -2,7 +2,6 @@ Fix sigaction static linking against libpthread
 
  db19d8d0 signal.h: provide prototype for __libc_sigaction and remove all others
  27fbcf79 signal.h: move prototypes for __syscall_[rt_]sigaction to common place
- 9c4fce55 nptl: remove sigaction, sigprocmask, and sigfillset from libpthread
 
 ---
 diff --git a/include/signal.h b/include/signal.h
@@ -286,15 +285,4 @@ diff --git a/libpthread/nptl/init.c b/libpthread/nptl/init.c
  
  /* Size and alignment of static TLS block.  */
  size_t __static_tls_size;
-diff --git a/libpthread/nptl/sysdeps/pthread/Makefile.in b/libpthread/nptl/sysdeps/pthread/Makefile.in
---- a/libpthread/nptl/sysdeps/pthread/Makefile.in
-+++ b/libpthread/nptl/sysdeps/pthread/Makefile.in
-@@ -33,7 +33,6 @@ libpthread_pthread_CSRC = \
- 	pthread_spin_init.c \
- 	pthread_spin_unlock.c \
- 	pt-longjmp.c \
--	pt-sigaction.c \
- 	tpp.c
- CFLAGS-pthread = $(SSP_ALL_CFLAGS) -DNOT_IN_libc -DIS_IN_libpthread
- CFLAGS-pthread_barrier_wait.c = -D_GNU_SOURCE
 -- 
