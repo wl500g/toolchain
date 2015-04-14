@@ -10,11 +10,7 @@ PREP_MK= OPENWRT_BUILD= QUIET=0
 
 include $(TOPDIR)/include/verbose.mk
 
-ifeq ($(SDK),1)
-  include $(TOPDIR)/include/version.mk
-else
-  REVISION:=$(shell $(TOPDIR)/scripts/getver.sh)
-endif
+REVISION:=$(shell $(TOPDIR)/scripts/getver.sh)
 
 TOOLCHAINVERSION:=$(REVISION)
 export TOOLCHAINVERSION
