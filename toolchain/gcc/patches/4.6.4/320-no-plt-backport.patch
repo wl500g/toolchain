@@ -1,0 +1,64 @@
+2015-05-11  Alexander Monakov  <amonakov@ispras.ru>
+
+	* calls.c (prepare_call_address): Transform PLT call to GOT lookup and
+	indirect call by forcing address into a pseudo with -fno-plt.
+	* common.opt (flag_plt): New option.
+	* doc/invoke.texi (Code Generation Options): Add -fno-plt.
+	([-fno-plt]): Document.
+
+--- trunk/gcc/calls.c	2015/05/11 11:24:35	223002
++++ trunk/gcc/calls.c	2015/05/11 13:20:57	223003
+@@ -225,6 +225,12 @@ prepare_call_address (tree fndecl, rtx f
+ 	       && targetm.small_register_classes_for_mode_p (FUNCTION_MODE))
+ 	      ? force_not_mem (memory_address (FUNCTION_MODE, funexp))
+ 	      : memory_address (FUNCTION_MODE, funexp));
++  else if (flag_pic && !flag_plt && fndecl
++	   && TREE_CODE (fndecl) == FUNCTION_DECL
++	   && !targetm.binds_local_p (fndecl))
++    {
++      funexp = force_reg (Pmode, funexp);
++    }
+   else if (! sibcallp)
+     {
+       if (!NO_FUNCTION_CSE && optimize && ! flag_no_function_cse)
+--- trunk/gcc/common.opt	2015/05/11 11:24:35	223002
++++ trunk/gcc/common.opt	2015/05/11 13:20:57	223003
+@@ -1781,6 +1781,10 @@
+ Common Report Var(flag_pie,1) Negative(fPIC)
+ Generate position-independent code for executables if possible (small mode)
+ 
++fplt
++Common Report Var(flag_plt) Init(1) Optimization
++Use PLT for PIC calls (-fno-plt: load the address from GOT at call site)
++
+ fplugin=
+ Common Joined RejectNegative Var(common_deferred_options) Defer
+ Specify a plugin to load
+--- trunk/gcc/doc/invoke.texi	2015/05/11 11:24:35	223002
++++ trunk/gcc/doc/invoke.texi	2015/05/11 13:20:57	223003
+@@ -1128,7 +1128,7 @@
+ -finstrument-functions-exclude-function-list=@var{sym},@var{sym},@dots{} @gol
+ -finstrument-functions-exclude-file-list=@var{file},@var{file},@dots{} @gol
+ -fno-common  -fno-ident @gol
+--fpcc-struct-return  -fpic  -fPIC -fpie -fPIE @gol
++-fpcc-struct-return  -fpic  -fPIC -fpie -fPIE -fno-plt @gol
+ -fno-jump-tables @gol
+ -frecord-gcc-switches @gol
+ -freg-struct-return  -fshort-enums @gol
+@@ -23782,6 +23782,16 @@
+ @code{__pie__} and @code{__PIE__}.  The macros have the value 1
+ for @option{-fpie} and 2 for @option{-fPIE}.
+ 
++@item -fno-plt
++@opindex fno-plt
++Do not use PLT for external function calls in position-independent code.
++Instead, load callee address at call site from GOT and branch to it.
++This leads to more efficient code by eliminating PLT stubs and exposing
++GOT load to optimizations.  On architectures such as 32-bit x86 where
++PLT stubs expect GOT pointer in a specific register, this gives more
++register allocation freedom to the compiler.  Lazy binding requires PLT:
++with @option{-fno-plt} all external symbols are resolved at load time.
++
+ @item -fno-jump-tables
+ @opindex fno-jump-tables
+ Do not use jump tables for switch statements even where it would be
