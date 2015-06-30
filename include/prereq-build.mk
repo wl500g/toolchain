@@ -123,10 +123,6 @@ $(eval $(call Require,gnutar, \
 	Please install GNU tar. \
 ))
 
-$(eval $(call RequireCommand,svn, \
-	Please install the subversion client. \
-))
-
 $(eval $(call RequireCommand,autoconf, \
 	Please install GNU autoconf. \
 ))
@@ -137,4 +133,8 @@ endef
 
 $(eval $(call Require,gnu-find, \
 	Please install GNU find \
+))
+
+$(eval $(call RequireCommand,git, \
+	Please install Git (git-core) >=1.6.5 \
 ))

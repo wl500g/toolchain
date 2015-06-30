@@ -19,7 +19,7 @@ try_svn() {
 
 try_git() {
 	[ -d .git ] || return 1
-	REV="$(git log -1 --all --format=format:"%h" origin/HEAD)"
+	REV="$(git log -1 --all --format=format:"%h" HEAD --)"
 	REV="${REV:+$REV}"
 	[ -n "$REV" ]
 }
