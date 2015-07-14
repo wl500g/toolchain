@@ -12,15 +12,9 @@ config HAVE_DOT_CONFIG
 
 #source "target/Config.in"
 
-config LINUX_2_4
-        bool
-	prompt "Kernel 2.4 features only"
-	default y
-
 config TARGET_BOARD
         string
-	default "brcm-2.4" if LINUX_2_4
-	default "brcm-2.6" if !LINUX_2_4
+	default "brcm-2.6"
 
 choice
 	prompt "Platform"

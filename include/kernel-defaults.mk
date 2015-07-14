@@ -6,18 +6,6 @@
 #
 
 KERNELNAME=
-ifneq (,$(findstring x86,$(BOARD)))
-  KERNELNAME="bzImage"
-endif
-ifneq (,$(findstring rdc,$(BOARD)))
-  KERNELNAME="bzImage"
-endif
-ifneq (,$(findstring ppc,$(BOARD)))
-  KERNELNAME="uImage"
-endif
-ifneq (,$(findstring avr32,$(BOARD)))
-  KERNELNAME="uImage"
-endif
 
 KERNEL_MAKEOPTS := -C $(LINUX_DIR) \
 	CROSS_COMPILE="$(KERNEL_CROSS)" \
@@ -57,11 +45,6 @@ define Kernel/Prepare/Default
 endef
 endif
 
-define Kernel/Configure/2.4
-	$(SED) "s,\-mcpu=,\-mtune=,g;" $(LINUX_DIR)/arch/mips/Makefile
-	$(MAKE) $(KERNEL_MAKEOPTS) oldconfig include/linux/compile.h include/linux/version.h
-	$(MAKE) $(KERNEL_MAKEOPTS) dep
-endef
 define Kernel/Configure/2.6
 	-$(MAKE) $(KERNEL_MAKEOPTS) oldconfig prepare scripts
 endef

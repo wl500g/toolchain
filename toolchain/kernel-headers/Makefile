@@ -41,18 +41,9 @@ define Build/Prepare
 	$(call Kernel/Prepare/Default)
 	mkdir -p $(LINUX_HEADERS_DIR)
 	yes '' | $(KMAKE) oldconfig
-ifeq ($(KERNEL),2.4)
-	$(KMAKE) include/linux/version.h include/asm
-	-mkdir $(LINUX_HEADERS_DIR)/include
-	cp -pLR $(BUILD_DIR_TOOLCHAIN)/linux-$(LINUX_VERSION)/include/asm-$(LINUX_KARCH) $(LINUX_HEADERS_DIR)/include/
-	cp -pLR $(BUILD_DIR_TOOLCHAIN)/linux-$(LINUX_VERSION)/include/asm-generic $(LINUX_HEADERS_DIR)/include/
-	cp -pLR $(BUILD_DIR_TOOLCHAIN)/linux-$(LINUX_VERSION)/include/linux $(LINUX_HEADERS_DIR)/include/
-	ln -sf  asm-$(LINUX_KARCH) $(LINUX_HEADERS_DIR)/include/asm
-else
 	$(KMAKE) include/linux/utsrelease.h
 	$(KMAKE) INSTALL_HDR_PATH="$(LINUX_HEADERS_DIR)" headers_install
 	find $(LINUX_HEADERS_DIR)/include \( -name .install -o -name ..install.cmd \) -delete
-endif
 endef
 
 define Build/Configure

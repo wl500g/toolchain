@@ -16,19 +16,10 @@ ifeq ($(DUMP),1)
 else
   export GCC_HONOUR_COPTS=s
 
-  ifeq ($(KERNEL),2.6)
-    LINUX_KMOD_SUFFIX=ko
-  else
-    LINUX_KMOD_SUFFIX=o
-  endif
+  LINUX_KMOD_SUFFIX=ko
 
-  ifneq (,$(findstring uml,$(BOARD)))
-    KERNEL_CC?=$(HOSTCC)
-    KERNEL_CROSS?=
-  else
-    KERNEL_CC?=$(TARGET_CC)
-    KERNEL_CROSS?=$(TARGET_CROSS)
-  endif
+  KERNEL_CC?=$(TARGET_CC)
+  KERNEL_CROSS?=$(TARGET_CROSS)
 
   PATCH_DIR ?= ./patches$(shell [ -d "./patches-$(KERNEL_PATCHVER)" ] && printf -- "-$(KERNEL_PATCHVER)" || true )
   FILES_DIR ?= ./files$(shell [ -d "./files-$(KERNEL_PATCHVER)" ] && printf -- "-$(KERNEL_PATCHVER)" || true )
@@ -49,17 +40,13 @@ else
   endif
 endif
 
-ifneq (,$(findstring uml,$(BOARD)))
-  LINUX_KARCH:=um
-else
-  ifeq (,$(LINUX_KARCH))
+ifeq (,$(LINUX_KARCH))
     LINUX_KARCH:=$(shell echo $(ARCH) | sed -e 's/i[3-9]86/i386/' \
 	  -e 's/mipsel/mips/' \
 	  -e 's/mipseb/mips/' \
 	  -e 's/sh[234]/sh/' \
 	  -e 's/armeb/arm/' \
     )
-  endif
 endif
 
 ifeq ($(DUMP)$(TARGET_BUILD),)

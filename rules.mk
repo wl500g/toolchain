@@ -34,9 +34,6 @@ TARGET_OPTIMIZATION:=$(call qstrip,$(CONFIG_TARGET_OPTIMIZATION))
 GCCV:=$(call qstrip,$(CONFIG_GCC_VERSION))
 SUBDIR:=$(patsubst $(TOPDIR)/%,%,${CURDIR})
 export SHELL:=/usr/bin/env bash
-ifneq ($(CONFIG_LINUX_2_4),y)
-  TGT_SUFFIX:=-K26
-endif
 
 OPTIMIZE_FOR_CPU=$(ARCH)
 
@@ -50,7 +47,7 @@ BUILD_DIR_HOST:=$(BUILD_DIR_BASE)/host
 BUILD_DIR_TOOLCHAIN:=$(BUILD_DIR_BASE)/toolchain-$(ARCH)_gcc$(GCCV)
 STAGING_DIR:=$(TOPDIR)/staging_dir/$(ARCH)
 STAGING_DIR_HOST:=$(TOPDIR)/staging_dir/host
-TOOLCHAIN_DIR:=/opt/brcm/hndtools-$(ARCH)-uclibc-$(GCCV)$(TGT_SUFFIX)
+TOOLCHAIN_DIR:=/opt/brcm/hndtools-$(ARCH)-uclibc-$(GCCV)-K26
 #TOOLCHAIN_DIR:=$(TOPDIR)/staging_dir/toolchain-$(ARCH)_gcc$(GCCV)
 PACKAGE_DIR:=$(BIN_DIR)/packages/$(ARCH)
 STAMP_DIR:=$(BUILD_DIR)/stamp
@@ -87,11 +84,7 @@ PKG_CONFIG:=$(STAGING_DIR_HOST)/bin/pkg-config
 
 export PKG_CONFIG
 
-ifeq ($(CONFIG_LINUX_2_4),y)
- KERNEL:=2.4
-else
- KERNEL:=2.6
-endif
+KERNEL:=2.6
 LINUX_HEADERS_DIR:=$(BUILD_DIR_TOOLCHAIN)/linux-dev
 
 HOSTCC:=gcc

@@ -6,12 +6,6 @@ choice
 	help
 	  Select the version of gcc you wish to use.
 
-	config GCC_VERSION_3_4_6
-		bool "gcc 3.4.6"
-
-	config GCC_VERSION_4_4_7
-		bool "gcc 4.4.7"
-
 	config GCC_VERSION_4_6_4
 		bool "gcc 4.6.4"
 
@@ -37,7 +31,6 @@ config EXTRA_GCC_CONFIG_OPTIONS
 
 config SSP_SUPPORT
 	bool
-	depends !GCC_VERSION_3_4_6
 	prompt "Enable Stack-Smashing Protection support"
 	default n
 	help
@@ -45,7 +38,7 @@ config SSP_SUPPORT
 
 config TLS_SUPPORT
 	bool
-	depends !GCC_VERSION_3_4_6 && !LINUX_2_4 && UCLIBC_VERSION_0_9_32
+	depends UCLIBC_VERSION_0_9_32
 	prompt "Enable Thread-local storage (TLS) support"
 	default n
 	help

@@ -66,9 +66,6 @@ world: prepare FORCE
 	$(RSTRIP) $(TOOLCHAIN_DIR)/bin
 	$(RSTRIP) $(TOOLCHAIN_DIR)/$(ARCH)-linux-uclibc/bin
 # Fix includes
-ifeq ($(CONFIG_LINUX_2_4),y)
-	-rm $(TOOLCHAIN_DIR)/include/sys/inotify.h
-endif
 	-tar -C toolchain/kernel-headers/extras/ --exclude='.svn' -cf - include | tar -C $(TOOLCHAIN_DIR) -xf -
 # Create addtional symlinks
 	ln -sf $(ARCH)-linux-gcc		$(TOOLCHAIN_DIR)/bin/$(ARCH)-linux-cc

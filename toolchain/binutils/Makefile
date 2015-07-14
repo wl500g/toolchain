@@ -21,10 +21,6 @@ PATCH_DIR:=./patches/$(PKG_VERSION)
 STAGING_DIR_HOST:=$(TOOLCHAIN_DIR)
 BUILD_DIR_HOST:=$(BUILD_DIR_TOOLCHAIN)
 
-ifeq ($(PKG_VERSION),2.21.1)
-  PKG_SOURCE:=binutils-2.21.1a.tar.bz2
-endif
-
 include $(INCLUDE_DIR)/host-build.mk
 
 EXTRA_TARGET=$(if $(CONFIG_EXTRA_TARGET_ARCH),--enable-targets=$(call qstrip,$(CONFIG_EXTRA_TARGET_ARCH_NAME))-linux-uclibc)
