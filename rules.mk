@@ -106,11 +106,18 @@ INSTALL_DIR:=install -d -m0755
 INSTALL_DATA:=install -m0644
 INSTALL_CONF:=install -m0600
 
+TARGET_CC_NOCACHE:=$(TARGET_CC)
+TARGET_CXX_NOCACHE:=$(TARGET_CXX)
+HOSTCC_NOCACHE:=$(HOSTCC)
+export TARGET_CC_NOCACHE TARGET_CXX_NOCACHE
+export HOSTCC_NOCACHE
+
 ifneq ($(CONFIG_CCACHE),)
   # FIXME: move this variable to a better location
   export CCACHE_DIR=$(STAGING_DIR)/ccache
   TARGET_CC:= ccache $(TARGET_CC)
   TARGET_CXX:= ccache $(TARGET_CXX)
+  HOSTCC:= ccache $(HOSTCC)
 endif
 
 TARGET_CONFIGURE_OPTS:= \
