@@ -23,33 +23,18 @@ define Build/Install/ccache
 	$(CP) ./files/* $(STAGING_DIR_HOST)/bin/
 endef
 
-ifneq ($(strip $(shell which ccache >/dev/null && echo found)),found)
-  define Build/Compile
+define Build/Compile
 	$(MAKE) -C $(PKG_BUILD_DIR)
-  endef
+endef
 
-  define Build/Clean
+define Build/Clean
 	-$(MAKE) -C $(PKG_BUILD_DIR) uninstall
 	$(call Build/Clean/Default)
-  endef
-  define Build/Install
+endef
+
+define Build/Install
 	$(call Build/Install/Default)
 	$(call Build/Install/ccache)
-  endef
-else
-  define Build/Prepare
-  endef
-  define Build/Configure
-  endef
-  define Build/Compile
-  endef
-  define Build/Install
-	$(call Build/Install/ccache)
-  endef
-  define Build/Clean
-  endef
-  define Download
-  endef
-endif
+endef
 
 $(eval $(call HostBuild))
