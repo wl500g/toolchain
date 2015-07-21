@@ -93,7 +93,6 @@ HOST_LDFLAGS:=-L$(STAGING_DIR_HOST)/lib
 
 TARGET_CC:=$(TARGET_CROSS)gcc
 TARGET_CXX:=$(TARGET_CROSS)g++
-#STRIP:=$(STAGING_DIR_HOST)/bin/sstrip
 STRIP:=strip
 PATCH:=$(SCRIPT_DIR)/patch-kernel.sh
 #SED:=$(STAGING_DIR_HOST)/bin/sed -i -e

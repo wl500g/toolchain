@@ -13,7 +13,6 @@ tools-y := pkg-config
 tools-$(CONFIG_GCC_VERSION_4_4)$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8) += gmp mpfr
 tools-$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8) += mpc libelf
 tools-$(CONFIG_CCACHE) += ccache
-#tools-y += sstrip ipkg-utils
 $(curdir)/builddirs := $(tools-y)
 $(curdir)/builddirs-compile := $($(curdir)/builddirs)
 $(curdir)/builddirs-install := $($(curdir)/builddirs-compile)
