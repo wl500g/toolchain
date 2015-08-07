@@ -1,0 +1,11 @@
+diff -urB binutils-2.25.1/configure binutils/configure
+--- binutils-2.25.1/configure
++++ binutils/configure
+@@ -3804,7 +3804,6 @@
+     noconfigdirs="$noconfigdirs ld gas gprof"
+     ;;
+   mips*-*-*)
+-    noconfigdirs="$noconfigdirs gprof"
+     ;;
+   nds32*-*-*)
+     noconfigdirs="$noconfigdirs gdb"

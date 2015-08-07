@@ -34,6 +34,7 @@ define Build/Configure
 		--host=$(GNU_HOST_NAME) \
 		--target=$(REAL_GNU_TARGET_NAME) \
 		--with-sysroot=$(TOOLCHAIN_DIR) \
+		--enable-deterministic-archives \
 		--disable-multilib \
 		--disable-werror \
 		--disable-nls \
