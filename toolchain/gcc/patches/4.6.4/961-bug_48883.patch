@@ -1,0 +1,46 @@
+[4.6/4.7] ?: ternary operator fails in certain contexts - link error
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=48883
+
+--- trunk/gcc/cp/ChangeLog	2011/07/01 18:01:41	175763
++++ trunk/gcc/cp/ChangeLog	2011/07/01 20:24:08	175764
+@@ -1,6 +1,12 @@
+ 
+ 	* error.c (type_to_string): Avoid redundant akas.
+ 
++2011-07-01  Jason Merrill  <jason@redhat.com>
++
++	PR c++/48883
++	PR c++/49609
++	* pt.c (resolve_nondeduced_context): Call mark_used.
++
+ 2011-06-27  Jason Merrill  <jason@redhat.com>
+ 
+ 	PR c++/49528
+--- trunk/gcc/cp/pt.c	2011/07/01 18:01:41	175763
++++ trunk/gcc/cp/pt.c	2011/07/01 20:24:08	175764
+@@ -14679,6 +14679,7 @@ resolve_nondeduced_context(tree orig_ex
+ 	}
+       if (good == 1)
+ 	{
++	  mark_used (goodfn);
+ 	  expr = goodfn;
+ 	  if (baselink)
+ 	    expr = build_baselink (BASELINK_BINFO (baselink),
+--- /dev/null
++++ trunk/gcc/testsuite/g++.dg/template/explicit-args4.C	2011/07/01 20:24:08	175764
+@@ -0,0 +1,14 @@
++// PR c++/48883
++// { dg-do link }
++
++template<typename T>
++T myMax(T a, T b) {
++   if(a < b) return a;
++   return b;
++}
++
++int main() {
++   bool even = true;
++   int (*fp)(int, int);
++   fp = even ? myMax<int> : myMax<int>;   /* yields link error */
++}
