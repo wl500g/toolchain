@@ -1,0 +1,39 @@
+memleak in split_quote_chain
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=36819
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=51061
+
+--- trunk/gcc/ChangeLog
++++ trunk/gcc/ChangeLog	2011/11/09 17:26:37	181216
+@@ -1,6 +1,18 @@
+ 	* tree-object-size.c (addr_object_size): Check TREE_CODE of
+ 	MEM_REF's operand rather than code of the MEM_REF itself.
+ 
++2011-11-09  Paolo Carlini  <paolo.carlini@oracle.com>
++
++	PR preprocessor/51061
++	* incpath.c (merge_include_chains): Make sure to not pass null
++	pointers to free_path.
++
++	2011-10-02  Paolo Carlini  <paolo.carlini@oracle.com>
++
++	PR preprocessor/36819
++	* incpath.c (merge_include_chains): Call free_path on
++	heads[QUOTE] and tails[QUOTE].
++
+ 2011-11-07  Alan Modra  <amodra@gmail.com>
+ 
+ 	PR target/30282
+--- trunk/gcc/incpath.c
++++ trunk/gcc/incpath.c	2011/11/09 17:26:37	181216
+@@ -362,6 +362,10 @@
+ void
+ split_quote_chain (void)
+ {
++  if (heads[QUOTE])
++    free_path (heads[QUOTE], REASON_QUIET);
++  if (tails[QUOTE])
++    free_path (tails[QUOTE], REASON_QUIET);
+   heads[QUOTE] = heads[BRACKET];
+   tails[QUOTE] = tails[BRACKET];
+   heads[BRACKET] = NULL;
