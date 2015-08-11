@@ -1,0 +1,47 @@
+[4.4/4.5/4.6/4.7 Regression] gimplifier produces volatile
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=52314
+
+--- trunk/gcc/ChangeLog	2012/02/21 12:37:33	184435
++++ trunk/gcc/ChangeLog	2012/02/21 14:10:31	184436
+@@ -1,6 +1,12 @@
+ 	* config/i386/i386.c (ix86_print_operand) <case 'H'>: Error out if x
+ 	is not offsettable memory reference.
+ 
++2012-02-21  Richard Guenther  <rguenther@suse.de>
++
++	PR middle-end/52314
++	* gimplify.c (create_tmp_from_val): Use the main variant type
++	for the type of the temporary we create.
++
+ 2012-02-21  Richard Earnshaw  <rearnsha@arm.com>
+ 
+ 	PR target/52294
+--- trunk/gcc/gimplify.c	2012/02/21 12:37:33	184435
++++ trunk/gcc/gimplify.c	2012/02/21 14:10:31	184436
+@@ -504,7 +504,8 @@
+ static inline tree
+ create_tmp_from_val (tree val)
+ {
+-  return create_tmp_var (TREE_TYPE (val), get_name (val));
++  /* Drop all qualifiers and address-space information from the value type.  */
++  return create_tmp_var (TYPE_MAIN_VARIANT (TREE_TYPE (val)), get_name (val));
+ }
+ 
+ /* Create a temporary to hold the value of VAL.  If IS_FORMAL, try to reuse
+--- /dev/null
++++ trunk/gcc/testsuite/gcc.dg/tree-ssa/pr52314.c
+@@ -0,0 +1,13 @@
++/* { dg-do compile } */
++/* { dg-options "-O -fdump-tree-gimple" } */
++
++volatile double bar;
++
++int foo()
++{
++ double baz = -__builtin_huge_val();
++ return baz <= -bar;
++}
++
++/* { dg-final { scan-tree-dump-times "volatile" 0 "gimple" } } */
++/* { dg-final { cleanup-tree-dump "gimple" } } */
