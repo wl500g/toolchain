@@ -1,0 +1,51 @@
+[4.6/4.7] ICE lower_stmt (4.6), verify_gimple_stmt (4.7.0, 4.7.1)
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=53812
+
+--- trunk/gcc/cp/ChangeLog	2012/07/03 13:05:47	189224
++++ trunk/gcc/cp/ChangeLog	2012/07/03 13:09:16	189225
+@@ -1,6 +1,12 @@
+ 	PR c++/54511
+ 	* pt.c (tsubst_decl) [VAR_DECL]: Handle DECL_ANON_UNION_VAR_P.
+ 
++2012-07-03  Jakub Jelinek  <jakub@redhat.com>
++
++	PR c++/53812
++	* semantics.c (finish_goto_stmt): Surround computed goto argument
++	with CLEANUP_POINT_EXPR if needed.
++
+ 2012-06-25  Jason Merrill  <jason@redhat.com>
+ 
+ 	PR c++/52988
+--- trunk/gcc/cp/semantics.c	2012/07/03 13:05:47	189224
++++ trunk/gcc/cp/semantics.c	2012/07/03 13:09:16	189225
+@@ -571,6 +571,9 @@ finish_goto_stmt (tree destination)
+ 	  destination = cp_convert (ptr_type_node, destination);
+ 	  if (error_operand_p (destination))
+ 	    return NULL_TREE;
++	  destination
++	    = fold_build_cleanup_point_expr (TREE_TYPE (destination),
++					     destination);
+ 	}
+       /* We don't inline calls to functions with computed gotos.
+ 	 Those functions are typically up to some funny business,
+--- /dev/null
++++ trunk/gcc/testsuite/g++.dg/ext/label14.C	2012/07/03 13:09:16	189225
+@@ -0,0 +1,17 @@
++// PR c++/53812
++// { dg-do compile }
++// { dg-options "" }
++
++struct T { T () : t(0) {}; int t; ~T (); };
++struct S { void *operator [] (T); };
++void bar (S &, void *, void *);
++
++void
++foo (S &x, T &y)
++{
++  bar (x, &&l1, &&l2);
++l1:
++  goto *x[y];
++l2:
++  bar (x, &&l1, &&l2);
++}
