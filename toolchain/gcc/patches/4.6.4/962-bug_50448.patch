@@ -1,0 +1,51 @@
+[4.5/4.6/4.7 Regression] Missed optimization accessing struct component with integer address
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=50448
+
+--- trunk/gcc/ChangeLog	2011/11/05 11:30:23	181010
++++ trunk/gcc/ChangeLog	2011/11/05 13:08:54	181011
+@@ -1,6 +1,12 @@
+ 	* config/rs6000/rs6000.c (rs6000_emit_stack_reset): Always emit
+ 	blockage for ABI_V4.
+ 
++2011-11-05  Georg-Johann Lay  <avr@gjlay.de>
++
++	PR rtl-optimization/50448
++	* gcse.c (try_replace_reg): Also try to replace uses of FROM that
++	appear in SET_DEST.
++
+ 2011-11-04  Eric Botcazou  <ebotcazou@adacore.com>
+ 
+ 	PR c++/50608
+--- trunk/gcc/gcse.c	2011/11/05 11:30:23	181010
++++ trunk/gcc/gcse.c	2011/11/05 13:08:54	181011
+@@ -2312,8 +2312,8 @@
+     }
+ }
+ 
+-/* Try to replace all non-SET_DEST occurrences of FROM in INSN with TO.
+-   Returns nonzero is successful.  */
++/* Try to replace all uses of FROM in INSN with TO.
++   Return nonzero if successful.  */
+ 
+ static int
+ try_replace_reg (rtx from, rtx to, rtx insn)
+@@ -2364,6 +2364,18 @@
+ 	note = set_unique_reg_note (insn, REG_EQUAL, copy_rtx (src));
+     }
+ 
++  if (set && MEM_P (SET_DEST (set)) && reg_mentioned_p (from, SET_DEST (set)))
++    {
++      /* Registers can also appear as uses in SET_DEST if it is a MEM.
++         We could perhaps try this for multiple SETs, but it probably
++         won't buy us anything.  */
++      rtx dest = simplify_replace_rtx (SET_DEST (set), from, to);
++      
++      if (!rtx_equal_p (dest, SET_DEST (set))
++          && validate_change (insn, &SET_DEST (set), dest, 0))
++        success = 1;
++    }
++
+   /* REG_EQUAL may get simplified into register.
+      We don't allow that. Remove that note. This code ought
+      not to happen, because previous code ought to synthesize
