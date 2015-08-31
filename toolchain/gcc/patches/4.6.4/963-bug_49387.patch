@@ -1,0 +1,55 @@
+[4.4/4.5/4.6] t.cxx:140: error: too many initializers for 'const __class_type_info_pseudo'
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=49387
+
+--- trunk/gcc/cp/ChangeLog	2011/07/01 00:17:43	175742
++++ trunk/gcc/cp/ChangeLog	2011/07/01 00:53:10	175743
+@@ -1,6 +1,11 @@
+ 	PR c++/49609
+ 	* pt.c (resolve_nondeduced_context): Call mark_used.
+ 
++2011-06-30  Jason Merrill  <jason@redhat.com>
++
++	PR c++/49387
++	* rtti.c (get_pseudo_ti_index): Call complete_type.
++
+ 2011-06-30  Jason Merrill  <jason@redhat.com>
+ 
+ 	PR c++/49355
+--- trunk/gcc/cp/rtti.c	2011/07/01 00:17:43	175742
++++ trunk/gcc/cp/rtti.c	2011/07/01 00:53:10	175743
+@@ -406,6 +406,8 @@  get_tinfo_decl (tree type)
+     type = build_function_type (TREE_TYPE (type),
+ 				TREE_CHAIN (TYPE_ARG_TYPES (type)));
+ 
++  type = complete_type (type);
++
+   /* For a class type, the variable is cached in the type node
+      itself.  */
+   if (CLASS_TYPE_P (type))
+--- /dev/null
++++ trunk/gcc/testsuite/g++.dg/rtti/template1.C	2011/07/01 00:53:10	175743
+@@ -0,0 +1,23 @@
++// PR c++/49387
++
++#include <typeinfo>
++
++struct ResourceMonitorClient { };
++
++template <typename T> struct ResourcePool : public ResourceMonitorClient {
++  virtual ~ResourcePool() { }
++};
++
++template <typename T> struct BaseWriter {
++
++  BaseWriter() {
++    typeid(ResourcePool<int>*);
++  }
++
++  virtual void run() {
++    ResourcePool<int> pool;
++  }
++
++};
++
++BaseWriter<void> b;
