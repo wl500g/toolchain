@@ -1,0 +1,161 @@
+Loses reference during update
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=45437
+
+--- trunk/gcc/ChangeLog	2011/07/09 03:33:44	176071
++++ trunk/gcc/ChangeLog	2011/07/09 03:33:54	176072
+@@ -1,6 +1,12 @@
+ 	* config/avr/avr.c (notice_update_cc): For ashiftrt:QI, only
+ 	offsets 1..5 set cc0 in a usable way.
+ 
++2011-07-08  Jason Merrill  <jason@redhat.com>
++
++	PR c++/45437
++	* gimplify.c (goa_stabilize_expr): Handle RHS preevaluation in
++	compound assignment.
++
+ 2011-07-08  Jakub Jelinek  <jakub@redhat.com>
+ 
+ 	PR target/49621
+--- trunk/gcc/c-family/ChangeLog	2011/07/09 03:33:44	176071
++++ trunk/gcc/c-family/ChangeLog	2011/07/09 03:33:54	176072
+@@ -1,6 +1,11 @@
+ 	* c-common.c (c_fully_fold_internal) <ADDR_EXPR>: Fold offsetof-like
+ 	computations.
+ 
++2011-07-08  Jason Merrill  <jason@redhat.com>
++
++	PR c++/45437
++	* c-omp.c (check_omp_for_incr_expr): Handle preevaluation.
++
+ 2011-06-27  Release Manager
+ 
+ 	* GCC 4.6.1 released.
+--- trunk/gcc/c-family/c-omp.c	2011/07/09 03:33:44	176071
++++ trunk/gcc/c-family/c-omp.c	2011/07/09 03:33:54	176072
+@@ -213,6 +213,27 @@
+         return fold_build2_loc (loc, PLUS_EXPR,
+ 			    TREE_TYPE (exp), TREE_OPERAND (exp, 0), t);
+       break;
++    case COMPOUND_EXPR:
++      {
++	/* cp_build_modify_expr forces preevaluation of the RHS to make
++	   sure that it is evaluated before the lvalue-rvalue conversion
++	   is applied to the LHS.  Reconstruct the original expression.  */
++	tree op0 = TREE_OPERAND (exp, 0);
++	if (TREE_CODE (op0) == TARGET_EXPR
++	    && !VOID_TYPE_P (TREE_TYPE (op0)))
++	  {
++	    tree op1 = TREE_OPERAND (exp, 1);
++	    tree temp = TARGET_EXPR_SLOT (op0);
++	    if (TREE_CODE_CLASS (TREE_CODE (op1)) == tcc_binary
++		&& TREE_OPERAND (op1, 1) == temp)
++	      {
++		op1 = copy_node (op1);
++		TREE_OPERAND (op1, 1) = TARGET_EXPR_INITIAL (op0);
++		return check_omp_for_incr_expr (loc, op1, decl);
++	      }
++	  }
++	break;
++      }
+     default:
+       break;
+     }
+--- trunk/gcc/cp/ChangeLog	2011/07/09 03:33:44	176071
++++ trunk/gcc/cp/ChangeLog	2011/07/09 03:33:54	176072
+@@ -1,6 +1,11 @@
+ 	* typeck2.c (digest_init_r): Handle VEC_INIT_EXPR.
+ 	* semantics.c (cxx_eval_vec_init_1): Correct type.
+ 
++2011-07-08  Jason Merrill  <jason@redhat.com>
++
++	PR c++/45437
++	* typeck.c (cp_build_modify_expr): Preevaluate RHS.
++
+ 2011-07-07  Jason Merrill  <jason@redhat.com>
+ 
+ 	PR c++/48157
+--- trunk/gcc/cp/typeck.c	2011/07/09 03:33:44	176071
++++ trunk/gcc/cp/typeck.c	2011/07/09 03:33:54	176072
+@@ -6663,6 +6663,8 @@
+ 	}
+       else
+ 	{
++	  tree init = NULL_TREE;
++
+ 	  /* A binary op has been requested.  Combine the old LHS
+ 	     value with the RHS producing the value we should actually
+ 	     store into the LHS.  */
+@@ -6670,7 +6672,17 @@
+ 			 && MAYBE_CLASS_TYPE_P (TREE_TYPE (lhstype)))
+ 			|| MAYBE_CLASS_TYPE_P (lhstype)));
+ 
++	  /* Preevaluate the RHS to make sure its evaluation is complete
++	     before the lvalue-to-rvalue conversion of the LHS:
++
++	     [expr.ass] With respect to an indeterminately-sequenced
++	     function call, the operation of a compound assignment is a
++	     single evaluation. [ Note: Therefore, a function call shall
++	     not intervene between the lvalue-to-rvalue conversion and the
++	     side effect associated with any single compound assignment
++	     operator. -- end note ]  */
+ 	  lhs = stabilize_reference (lhs);
++	  rhs = stabilize_expr (rhs, &init);
+ 	  newrhs = cp_build_binary_op (input_location,
+ 				       modifycode, lhs, rhs,
+ 				       complain);
+@@ -6682,6 +6694,9 @@
+ 	      return error_mark_node;
+ 	    }
+ 
++	  if (init)
++	    newrhs = build2 (COMPOUND_EXPR, TREE_TYPE (newrhs), init, newrhs);
++
+ 	  /* Now it looks like a plain assignment.  */
+ 	  modifycode = NOP_EXPR;
+ 	  if (c_dialect_objc ())
+--- trunk/gcc/gimplify.c	2011/07/09 03:33:44	176071
++++ trunk/gcc/gimplify.c	2011/07/09 03:33:54	176072
+@@ -6451,6 +6451,13 @@
+ 	  saw_lhs |= goa_stabilize_expr (&TREE_OPERAND (expr, 0), pre_p,
+ 					 lhs_addr, lhs_var);
+ 	  break;
++	case COMPOUND_EXPR:
++	  /* Break out any preevaluations from cp_build_modify_expr.  */
++	  for (; TREE_CODE (expr) == COMPOUND_EXPR;
++	       expr = TREE_OPERAND (expr, 1))
++	    gimplify_stmt (&TREE_OPERAND (expr, 0), pre_p);
++	  *expr_p = expr;
++	  return goa_stabilize_expr (expr_p, pre_p, lhs_addr, lhs_var);
+ 	default:
+ 	  break;
+ 	}
+--- /dev/null
++++ trunk/gcc/testsuite/g++.dg/expr/compound-asn1.C	2011/07/09 03:33:54	176072
+@@ -0,0 +1,15 @@
++// PR c++/45437
++// { dg-options -Wsequence-point }
++// { dg-do run }
++
++bool f(bool& b) {
++  b = true;
++  return false;
++}
++
++int main() {
++  bool b = false;
++  b |= f(b);
++  if (!b)
++    return 1;
++}
+--- trunk/gcc/testsuite/g++.dg/warn/sequence-pt-1.C	2011/07/09 03:33:44	176071
++++ trunk/gcc/testsuite/g++.dg/warn/sequence-pt-1.C	2011/07/09 03:33:54	176072
+@@ -62,7 +62,7 @@
+   (a = a++) && b; /* { dg-warning "undefined" "sequence point warning" } */
+   b, (a = a++); /* { dg-warning "undefined" "sequence point warning" } */
+   (a = a++), b; /* { dg-warning "undefined" "sequence point warning" } */
+-  a ^= b ^= a ^= b; /* { dg-warning "undefined" "sequence point warning" } */
++  a ^= b ^= a ^= b; /* { dg-bogus "undefined" "sequence point warning" } */
+ 
+   a = a; /* { dg-bogus "undefined" "bogus sequence point warning" } */
+   a = (a++ && 4); /* { dg-bogus "undefined" "bogus sequence point warning" } */
