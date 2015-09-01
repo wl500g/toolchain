@@ -1,0 +1,76 @@
+[4.6/4.7/4.8] VN does not use simplified expression for lookup
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=52631
+
+--- trunk/gcc/ChangeLog	2013/01/20 00:18:29	195317
++++ trunk/gcc/ChangeLog	2013/01/20 05:00:56	195318
+@@ -1,6 +1,12 @@
+ 	* ipa.c (cgraph_remove_unreachable_nodes): Never return true for
+ 	virtual methods before inlining is over.
+ 
++2013-01-19  Andrew Pinski  <apinski@cavium.com>
++
++	PR tree-optimization/52631
++	* tree-ssa-sccvn (visit_use): Before looking up the original
++	statement, try looking up the simplified expression.
++
+ 2013-01-14  Matthias Klose  <doko@ubuntu.com>
+ 
+ 	* doc/invoke.texi: Document -print-multiarch.
+--- trunk/gcc/tree-ssa-sccvn.c	2013/01/20 00:18:29	195317
++++ trunk/gcc/tree-ssa-sccvn.c	2013/01/20 05:00:56	195318
+@@ -3422,6 +3422,28 @@  visit_use (tree use)
+ 		}
+ 	      else
+ 		{
++		  /* First try to lookup the simplified expression.  */
++		  if (simplified)
++		    {
++		      enum gimple_rhs_class rhs_class;
++
++
++		      rhs_class = get_gimple_rhs_class (TREE_CODE (simplified));
++		      if ((rhs_class == GIMPLE_UNARY_RHS
++			   || rhs_class == GIMPLE_BINARY_RHS
++			   || rhs_class == GIMPLE_TERNARY_RHS)
++			  && valid_gimple_rhs_p (simplified))
++			{
++			  tree result = vn_nary_op_lookup (simplified, NULL);
++			  if (result)
++			    {
++			      changed = set_ssa_val_to (lhs, result);
++			      goto done;
++			    }
++			}
++		    }
++
++		  /* Otherwise visit the original statement.  */
+ 		  switch (get_gimple_rhs_class (code))
+ 		    {
+ 		    case GIMPLE_UNARY_RHS:
+--- trunk/gcc/testsuite/gcc.dg/tree-ssa/ssa-fre-9.c	2013/01/20 00:18:29	195317
++++ trunk/gcc/testsuite/gcc.dg/tree-ssa/ssa-fre-9.c	2013/01/20 05:00:56	195318
+@@ -23,6 +23,6 @@
+     }
+ }
+ 
+-/* { dg-final { scan-tree-dump-times "Eliminated: 1" 2 "fre" } } */
++/* { dg-final { scan-tree-dump-times "Eliminated: 2" 2 "fre" } } */
+ /* { dg-final { scan-tree-dump-times "Insertions: 1" 2 "fre" } } */
+ /* { dg-final { cleanup-tree-dump "fre" } } */
+--- /dev/null
++++ trunk/gcc/testsuite/gcc.dg/tree-ssa/pr52631.c	2013/01/20 05:00:56	195318
+@@ -0,0 +1,13 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -fdump-tree-fre-details" } */
++
++unsigned f(unsigned a)
++{
++  unsigned b = a >> 31;
++  return b&1;
++}
++
++/* We want to verify that we replace the b & 1 with b.  */
++/* { dg-final { scan-tree-dump-times "Replaced b_\[0-9\]+ & 1 with b_\[0-9\]+ in" 1 "fre"} } */
++ 
++/* { dg-final { cleanup-tree-dump "fre" } } */
