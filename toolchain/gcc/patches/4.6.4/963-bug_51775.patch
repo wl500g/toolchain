@@ -1,0 +1,168 @@
+[4.6] FAIL: gnat.dg/pack9.adb scan-tree-dump-not optimized "gnat_rcheck"
+
+diff --git a/gcc/ChangeLog b/gcc/ChangeLog
+--- a/gcc/ChangeLog
++++ b/gcc/ChangeLog
+@@ -1,6 +1,15 @@
+	mode count is in.
+	(doloop_optimize): Update call to doloop_modify.
+ 
++2012-01-09  Richard Guenther  <rguenther@suse.de>
++
++	PR tree-optimization/51775
++	* tree-ssa-sccvn.c (visit_use): Value-number throwing stmts.
++	* tree-ssa-pre.c (eliminate): Properly fixup EH info.
++
++	* tree-ssa-sccvn.c (visit_use): CSE stmt pieces and simplify
++	matching.
++
+ 2012-01-09  Richard Sandiford  <rdsandiford@googlemail.com>
+ 
+ 	* config/mips/mips.md (loadgp_newabi_<mode>): Add missing earlyclobber.
+diff --git a/gcc/tree-ssa-pre.c b/gcc/tree-ssa-pre.c
+--- a/gcc/tree-ssa-pre.c
++++ b/gcc/tree-ssa-pre.c
+@@ -4194,6 +4194,7 @@ eliminate (void)
+ 	      tree sprime = NULL;
+ 	      pre_expr lhsexpr = get_or_alloc_expr_for_name (lhs);
+ 	      pre_expr sprimeexpr;
++	      gimple orig_stmt = stmt;
+ 
+ 	      if (gimple_assign_single_p (stmt))
+ 		rhs = gimple_assign_rhs1 (stmt);
+@@ -4231,6 +4232,16 @@ eliminate (void)
+ 		  propagate_tree_value_into_stmt (&gsi, sprime);
+ 		  stmt = gsi_stmt (gsi);
+ 		  update_stmt (stmt);
++
++		  /* If we removed EH side-effects from the statement, clean
++		     its EH information.  */
++		  if (maybe_clean_or_replace_eh_stmt (orig_stmt, stmt))
++		    {
++		      bitmap_set_bit (need_eh_cleanup,
++				      gimple_bb (stmt)->index);
++		      if (dump_file && (dump_flags & TDF_DETAILS))
++			fprintf (dump_file, "  Removed EH side-effects.\n");
++		    }
+ 		  continue;
+ 		}
+ 
+@@ -4286,7 +4297,7 @@ eliminate (void)
+ 
+ 		  /* If we removed EH side-effects from the statement, clean
+ 		     its EH information.  */
+-		  if (maybe_clean_or_replace_eh_stmt (stmt, stmt))
++		  if (maybe_clean_or_replace_eh_stmt (orig_stmt, stmt))
+ 		    {
+ 		      bitmap_set_bit (need_eh_cleanup,
+ 				      gimple_bb (stmt)->index);
+diff --git a/gcc/tree-ssa-sccvn.c b/gcc/tree-ssa-sccvn.c
+--- a/gcc/tree-ssa-sccvn.c
++++ b/gcc/tree-ssa-sccvn.c
+@@ -2806,21 +2806,21 @@ visit_use (tree use)
+       if (gimple_code (stmt) == GIMPLE_PHI)
+ 	changed = visit_phi (stmt);
+       else if (!gimple_has_lhs (stmt)
+-	       || gimple_has_volatile_ops (stmt)
+-	       || stmt_could_throw_p (stmt))
++	       || gimple_has_volatile_ops (stmt))
+ 	changed = defs_to_varying (stmt);
+       else if (is_gimple_assign (stmt))
+ 	{
++	  enum tree_code code = gimple_assign_rhs_code (stmt);
+ 	  tree lhs = gimple_assign_lhs (stmt);
++	  tree rhs1 = gimple_assign_rhs1 (stmt);
+ 	  tree simplified;
+ 
+ 	  /* Shortcut for copies. Simplifying copies is pointless,
+ 	     since we copy the expression and value they represent.  */
+-	  if (gimple_assign_copy_p (stmt)
+-	      && TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME
++	  if (code == SSA_NAME
+ 	      && TREE_CODE (lhs) == SSA_NAME)
+ 	    {
+-	      changed = visit_copy (lhs, gimple_assign_rhs1 (stmt));
++	      changed = visit_copy (lhs, rhs1);
+ 	      goto done;
+ 	    }
+ 	  simplified = try_to_simplify (stmt);
+@@ -2887,24 +2887,22 @@ visit_use (tree use)
+ 	       /* We can substitute SSA_NAMEs that are live over
+ 		  abnormal edges with their constant value.  */
+ 	       && !(gimple_assign_copy_p (stmt)
+-		    && is_gimple_min_invariant (gimple_assign_rhs1 (stmt)))
++		    && is_gimple_min_invariant (rhs1))
+ 	       && !(simplified
+ 		    && is_gimple_min_invariant (simplified))
+ 	       && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (lhs))
+ 	      /* Stores or copies from SSA_NAMEs that are live over
+ 		 abnormal edges are a problem.  */
+-	      || (gimple_assign_single_p (stmt)
+-		  && TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME
+-		  && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (gimple_assign_rhs1 (stmt))))
++	      || (code == SSA_NAME
++		  && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (rhs1)))
+ 	    changed = defs_to_varying (stmt);
+-	  else if (REFERENCE_CLASS_P (lhs) || DECL_P (lhs))
+-	    {
+-	      changed = visit_reference_op_store (lhs, gimple_assign_rhs1 (stmt), stmt);
+-	    }
++	  else if (REFERENCE_CLASS_P (lhs)
++		   || DECL_P (lhs))
++	    changed = visit_reference_op_store (lhs, rhs1, stmt);
+ 	  else if (TREE_CODE (lhs) == SSA_NAME)
+ 	    {
+ 	      if ((gimple_assign_copy_p (stmt)
+-		   && is_gimple_min_invariant (gimple_assign_rhs1 (stmt)))
++		   && is_gimple_min_invariant (rhs1))
+ 		  || (simplified
+ 		      && is_gimple_min_invariant (simplified)))
+ 		{
+@@ -2912,11 +2910,11 @@ visit_use (tree use)
+ 		  if (simplified)
+ 		    changed = set_ssa_val_to (lhs, simplified);
+ 		  else
+-		    changed = set_ssa_val_to (lhs, gimple_assign_rhs1 (stmt));
++		    changed = set_ssa_val_to (lhs, rhs1);
+ 		}
+ 	      else
+ 		{
+-		  switch (get_gimple_rhs_class (gimple_assign_rhs_code (stmt)))
++		  switch (get_gimple_rhs_class (code))
+ 		    {
+ 		    case GIMPLE_UNARY_RHS:
+ 		    case GIMPLE_BINARY_RHS:
+@@ -2924,25 +2922,24 @@ visit_use (tree use)
+ 		      changed = visit_nary_op (lhs, stmt);
+ 		      break;
+ 		    case GIMPLE_SINGLE_RHS:
+-		      switch (TREE_CODE_CLASS (gimple_assign_rhs_code (stmt)))
++		      switch (TREE_CODE_CLASS (code))
+ 			{
+ 			case tcc_reference:
+ 			  /* VOP-less references can go through unary case.  */
+-			  if ((gimple_assign_rhs_code (stmt) == REALPART_EXPR
+-			       || gimple_assign_rhs_code (stmt) == IMAGPART_EXPR
+-			       || gimple_assign_rhs_code (stmt) == VIEW_CONVERT_EXPR)
+-			      && TREE_CODE (TREE_OPERAND (gimple_assign_rhs1 (stmt), 0)) == SSA_NAME)
++			  if ((code == REALPART_EXPR
++			       || code == IMAGPART_EXPR
++			       || code == VIEW_CONVERT_EXPR)
++			      && TREE_CODE (TREE_OPERAND (rhs1, 0)) == SSA_NAME)
+ 			    {
+ 			      changed = visit_nary_op (lhs, stmt);
+ 			      break;
+ 			    }
+ 			  /* Fallthrough.  */
+ 			case tcc_declaration:
+-			  changed = visit_reference_op_load
+-			      (lhs, gimple_assign_rhs1 (stmt), stmt);
++			  changed = visit_reference_op_load (lhs, rhs1, stmt);
+ 			  break;
+ 			case tcc_expression:
+-			  if (gimple_assign_rhs_code (stmt) == ADDR_EXPR)
++			  if (code == ADDR_EXPR)
+ 			    {
+ 			      changed = visit_nary_op (lhs, stmt);
+ 			      break;
+-- 
