@@ -7,12 +7,11 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=gdb
-PKG_VERSION:=6.8
+PKG_VERSION:=7.8
 
-PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.bz2
-PKG_MD5SUM:=c9da266b884fb8fa54df786dfaadbc7a
-PKG_SOURCE_URL:=http://ftp.gnu.org/gnu/gdb
-PKG_CAT:=bzcat
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.xz
+PKG_MD5SUM:=bd958fe9019d7c7896f29f6724a764ed
+PKG_SOURCE_URL:=@GNU/gdb
 
 STAGING_DIR_HOST:=$(TOOLCHAIN_DIR)
 BUILD_DIR_HOST:=$(BUILD_DIR_TOOLCHAIN)
@@ -21,8 +20,8 @@ include $(INCLUDE_DIR)/host-build.mk
 
 define Build/Configure
 	(cd $(PKG_BUILD_DIR); \
-		CFLAGS="-O2" \
 		gdb_cv_func_sigsetjmp=yes \
+		CFLAGS="-O2" \
 		$(PKG_BUILD_DIR)/configure \
 		--prefix=$(TOOLCHAIN_DIR) \
 		--build=$(GNU_HOST_NAME) \
@@ -34,6 +33,7 @@ define Build/Configure
 		--disable-tui --disable-gdbtk --without-x \
 		--without-included-gettext \
 		--enable-threads \
+		--with-expat \
 	);
 endef
 
