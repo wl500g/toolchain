@@ -29,8 +29,6 @@ else
   MODULES_SUBDIR:=lib/modules/$(LINUX_VERSION)
   TARGET_MODULES_DIR := $(LINUX_TARGET_DIR)/$(MODULES_SUBDIR)
 
-  LINUX_KERNEL:=$(KERNEL_BUILD_DIR)/vmlinux
-
   LINUX_SOURCE:=linux-$(LINUX_VERSION).tar.bz2
   TESTING:=$(if $(findstring -rc,$(LINUX_VERSION)),/testing,)
   LINUX_SITE:=@KERNEL/linux/kernel/v$(KERNEL)$(TESTING) \

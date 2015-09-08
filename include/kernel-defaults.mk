@@ -37,6 +37,10 @@ define Kernel/Prepare/Default
 endef
 else
 define Kernel/Prepare/Default
+	if [ \! -d $(CONFIG_EXTERNAL_KERNEL_TREE) ]; then \
+		$(call MESSAGE, Failed to locate kernel sources at $(CONFIG_EXTERNAL_KERNEL_TREE)); \
+		false; \
+	fi
 	mkdir -p $(KERNEL_BUILD_DIR)
 	if [ -d $(LINUX_DIR) ]; then \
 		rmdir $(LINUX_DIR); \
@@ -58,7 +62,6 @@ endef
 
 define Kernel/Clean/Default
 	rm -f $(KERNEL_BUILD_DIR)/linux-$(LINUX_VERSION)/.configured
-	rm -f $(LINUX_KERNEL)
 	$(MAKE) -C $(KERNEL_BUILD_DIR)/linux-$(LINUX_VERSION) clean
 endef
 
