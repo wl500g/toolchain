@@ -1,0 +1,42 @@
+std::use_facet throws bad_cast when compiled with _GLIBCXX_DEBUG
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=52540
+
+--- gcc-4_7-branch/libstdc++-v3/ChangeLog	2012/03/23 09:37:58	185732
++++ gcc-4_7-branch/libstdc++-v3/ChangeLog	2012/03/23 11:00:54	185733
+@@ -1,6 +1,13 @@
+ 	* testsuite/Makefile.am (TEST_GCC_EXEC_PREFIX): New.
+ 	* testsuite/Makefile.in: Regenerated.
+ 
++2012-03-23  Paweł Sikora  <pawel.sikora@agmk.net>
++
++	PR libstdc++/52540
++	* include/Makefile.am (c++config.h): Fix sed rule to not break
++	the _GLIBCXX_EXTERN_TEMPLATE redefinition.
++	* include/Makefile.in: Regenerate.
++
+ 2012-03-08  Jonathan Wakely  <jwakely.gcc@gmail.com>
+ 
+ 	PR libstdc++/52433
+--- gcc-4_7-branch/libstdc++-v3/include/Makefile.am	2012/03/23 09:37:58	185732
++++ gcc-4_7-branch/libstdc++-v3/include/Makefile.am	2012/03/23 11:00:54	185733
+@@ -1105,7 +1105,7 @@
+ 	sed -e "s,define __GLIBCXX__,define __GLIBCXX__ $$date," \
+ 	-e "s,define _GLIBCXX_INLINE_VERSION, define _GLIBCXX_INLINE_VERSION $$ns_version," \
+ 	-e "s,define _GLIBCXX_HAVE_ATTRIBUTE_VISIBILITY, define _GLIBCXX_HAVE_ATTRIBUTE_VISIBILITY $$visibility," \
+-	-e "s,define _GLIBCXX_EXTERN_TEMPLATE, define _GLIBCXX_EXTERN_TEMPLATE $$externtemplate," \
++	-e "s,define _GLIBCXX_EXTERN_TEMPLATE$$, define _GLIBCXX_EXTERN_TEMPLATE $$externtemplate," \
+ 	-e "$$ldbl_compat" \
+             < ${glibcxx_srcdir}/include/bits/c++config > $@ ;\
+ 	sed -e 's/HAVE_/_GLIBCXX_HAVE_/g' \
+--- gcc-4_7-branch/libstdc++-v3/include/Makefile.in	2012/03/23 09:37:58	185732
++++ gcc-4_7-branch/libstdc++-v3/include/Makefile.in	2012/03/23 11:00:54	185733
+@@ -1497,7 +1497,7 @@
+ 	sed -e "s,define __GLIBCXX__,define __GLIBCXX__ $$date," \
+ 	-e "s,define _GLIBCXX_INLINE_VERSION, define _GLIBCXX_INLINE_VERSION $$ns_version," \
+ 	-e "s,define _GLIBCXX_HAVE_ATTRIBUTE_VISIBILITY, define _GLIBCXX_HAVE_ATTRIBUTE_VISIBILITY $$visibility," \
+-	-e "s,define _GLIBCXX_EXTERN_TEMPLATE, define _GLIBCXX_EXTERN_TEMPLATE $$externtemplate," \
++	-e "s,define _GLIBCXX_EXTERN_TEMPLATE$$, define _GLIBCXX_EXTERN_TEMPLATE $$externtemplate," \
+ 	-e "$$ldbl_compat" \
+             < ${glibcxx_srcdir}/include/bits/c++config > $@ ;\
+ 	sed -e 's/HAVE_/_GLIBCXX_HAVE_/g' \
