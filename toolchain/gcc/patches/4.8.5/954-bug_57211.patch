@@ -1,0 +1,72 @@
+# DP: Fix PR c++/57211, don't warn about unused parameters of defaulted functions.
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=57211
+
+diff --git a/gcc/cp/ChangeLog b/gcc/cp/ChangeLog
+--- a/gcc/cp/ChangeLog
++++ b/gcc/cp/ChangeLog
+@@ -1,6 +1,12 @@
+ 	* pt.c (instantiation_dependent_r) [TRAIT_EXPR]: Only check type2
+ 	if there is one.
+ 
++2013-05-22  Paolo Carlini  <paolo.carlini@oracle.com>
++
++	PR c++/57211
++	* method.c (defaultable_fn_check): Avoid do_warn_unused_parameter
++	warnings about defaulted functions.
++
+ 2013-05-20  Jason Merrill  <jason@redhat.com>
+ 
+ 	PR c++/57325
+diff --git a/gcc/cp/method.c b/gcc/cp/method.c
+index 0d779a0..f314d0d 100644
+--- a/gcc/cp/method.c
++++ b/gcc/cp/method.c
+@@ -1864,13 +1864,19 @@ defaultable_fn_check (tree fn)
+     }
+   else
+     {
+-      tree t = FUNCTION_FIRST_USER_PARMTYPE (fn);
+-      for (; t && t != void_list_node; t = TREE_CHAIN (t))
++      for (tree t = FUNCTION_FIRST_USER_PARMTYPE (fn);
++	   t && t != void_list_node; t = TREE_CHAIN (t))
+ 	if (TREE_PURPOSE (t))
+ 	  {
+ 	    error ("defaulted function %q+D with default argument", fn);
+ 	    break;
+ 	  }
++
++      /* Avoid do_warn_unused_parameter warnings.  */
++      for (tree p = FUNCTION_FIRST_USER_PARM (fn); p; p = DECL_CHAIN (p))
++	if (DECL_NAME (p))
++	  TREE_NO_WARNING (p) = 1;
++
+       if (TYPE_BEING_DEFINED (DECL_CONTEXT (fn)))
+ 	/* Defer checking.  */;
+       else if (!processing_template_decl)
+--- /dev/null
++++ b/src/gcc/testsuite/g++.dg/cpp0x/Wunused-parm.C
+@@ -0,0 +1,23 @@
++// PR c++/57211
++// { dg-options "-std=c++11 -Wunused-parameter" }
++
++template <class T> T&& move(T&);
++
++struct A
++{
++  struct B
++  {
++    B& operator=(B&&);
++  };
++
++  B f;
++
++  A& operator=(A&& p) = default;
++};
++
++int main()
++{
++  A a;
++  A b;
++  b = move(a);
++}

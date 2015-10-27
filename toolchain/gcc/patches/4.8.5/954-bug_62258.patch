@@ -1,0 +1,97 @@
+[4.8/4.9/5] uncaught_exception() equals to `true' after rethrow_exception()
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=62258
+
+--- gcc-4_9-branch/libstdc++-v3/ChangeLog	2015/09/03 15:10:52	227455
++++ gcc-4_9-branch/libstdc++-v3/ChangeLog	2015/09/03 16:02:07	227456
+@@ -1,3 +1,14 @@
++2015-09-03  Jonathan Wakely  <jwakely@redhat.com>
++
++	Backport from mainline
++	2015-04-27  Dmitry Prokoptsev  <dprokoptsev@gmail.com>
++		    Michael Hanselmann  <public@hansmi.ch>
++
++	PR libstdc++/62258
++	* libsupc++/eh_ptr.cc (rethrow_exception): Increment count of
++	uncaught exceptions.
++	* testsuite/18_support/exception_ptr/62258.cc: New.
++
+ 2015-06-23  Release Manager
+ 
+ 	* GCC 4.8.5 released.
+--- gcc-4_9-branch/libstdc++-v3/libsupc++/eh_ptr.cc	2015/09/03 15:10:52	227455
++++ gcc-4_9-branch/libstdc++-v3/libsupc++/eh_ptr.cc	2015/09/03 16:02:07	227456
+@@ -217,6 +217,9 @@ std::rethrow_exception(std::exception_pt
+   __GXX_INIT_DEPENDENT_EXCEPTION_CLASS(dep->unwindHeader.exception_class);
+   dep->unwindHeader.exception_cleanup = __gxx_dependent_exception_cleanup;
+ 
++  __cxa_eh_globals *globals = __cxa_get_globals ();
++  globals->uncaughtExceptions += 1;
++
+ #ifdef _GLIBCXX_SJLJ_EXCEPTIONS
+   _Unwind_SjLj_RaiseException (&dep->unwindHeader);
+ #else
+--- /dev/null
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/62258.cc
+@@ -0,0 +1,61 @@
++// { dg-options "-std=gnu++11" }
++// { dg-require-atomic-builtins "" }
++
++// Copyright (C) 2015 Free Software Foundation, Inc.
++//
++// This file is part of the GNU ISO C++ Library.  This library is free
++// software; you can redistribute it and/or modify it under the
++// terms of the GNU General Public License as published by the
++// Free Software Foundation; either version 3, or (at your option)
++// any later version.
++
++// This library is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++
++// You should have received a copy of the GNU General Public License along
++// with this library; see the file COPYING3.  If not see
++// <http://www.gnu.org/licenses/>.
++
++// PR libstdc++/62258
++
++#include <exception>
++#include <testsuite_hooks.h>
++
++struct check_on_destruct
++{
++  ~check_on_destruct();
++};
++
++check_on_destruct::~check_on_destruct()
++{
++  VERIFY(std::uncaught_exception());
++}
++
++int main ()
++{
++  VERIFY(!std::uncaught_exception());
++
++  try
++    {
++      check_on_destruct check;
++
++      try
++        {
++          throw 1;
++        }
++      catch (...)
++        {
++          VERIFY(!std::uncaught_exception());
++
++          std::rethrow_exception(std::current_exception());
++        }
++    }
++  catch (...)
++    {
++      VERIFY(!std::uncaught_exception());
++    }
++
++  VERIFY(!std::uncaught_exception());
++}

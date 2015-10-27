@@ -1,0 +1,68 @@
+[4.8/4.9] Introducing an unrelated template parameter causes compilation to fail
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=62255
+
+--- gcc-4_9-branch/gcc/cp/ChangeLog	2015/02/26 02:43:52	220996
++++ gcc-4_9-branch/gcc/cp/ChangeLog	2015/02/26 02:43:58	220997
+@@ -1,6 +1,12 @@
+ 	* name-lookup.c (do_class_using_decl): Complain about specifying
+ 	the current class even if there are dependent bases.
+ 
++2015-02-25  Jason Merrill  <jason@redhat.com>
++
++	PR c++/62255
++	* pt.c (instantiate_decl): Handle recursive instantiation of
++	static data member.
++
+ 2015-01-13  Jason Merrill  <jason@redhat.com>
+ 
+ 	PR c++/64487
+--- gcc-4_9-branch/gcc/cp/pt.c	2015/02/26 02:43:52	220996
++++ gcc-4_9-branch/gcc/cp/pt.c	2015/02/26 02:43:58	220997
+@@ -18856,13 +18856,18 @@ instantiate_decl (tree d, int defer_ok,
+ 			      args,
+ 			      tf_warning_or_error, NULL_TREE,
+ 			      /*integral_constant_expression_p=*/false);
+-	  /* Make sure the initializer is still constant, in case of
+-	     circular dependency (template/instantiate6.C). */
+-	  const_init
+-	    = DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (code_pattern);
+-	  cp_finish_decl (d, init, /*init_const_expr_p=*/const_init,
+-			  /*asmspec_tree=*/NULL_TREE,
+-			  LOOKUP_ONLYCONVERTING);
++	  /* If instantiating the initializer involved instantiating this
++	     again, don't call cp_finish_decl twice.  */
++	  if (!DECL_INITIAL (d))
++	    {
++	      /* Make sure the initializer is still constant, in case of
++		 circular dependency (template/instantiate6.C). */
++	      const_init
++		= DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (code_pattern);
++	      cp_finish_decl (d, init, /*init_const_expr_p=*/const_init,
++			      /*asmspec_tree=*/NULL_TREE,
++			      LOOKUP_ONLYCONVERTING);
++	    }
+ 	  pop_nested_class ();
+ 	  pop_nested_namespace (ns);
+ 	}
+--- /dev/null
++++ gcc-4_9-branch/gcc/testsuite/g++.dg/template/recurse4.C
+@@ -0,0 +1,18 @@
++// PR c++/62255
++
++// It's not clear whether this is well-formed; instantiating the
++// initializer of 'value' causes the instantiation of Derived, which in
++// turn requires the value of 'value', but the recursion ends there, so it
++// seems reasonable to allow it.
++
++template <typename T> struct Test {
++  template<typename X> static int check(typename X::Type*);
++  template<typename> static char check(...);
++  static const bool value = (sizeof(check<T>(0)) == sizeof(int));
++};
++template <int> struct Sink { };
++template <typename T> struct Derived : Sink<Test<Derived<T> >::value> {
++  typedef int Type;
++};
++
++Sink<Test<Derived<int> >::value> s;

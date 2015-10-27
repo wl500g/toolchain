@@ -1,0 +1,83 @@
+[4.8] NULL deref in fold_rtx (prev_insn_cc0 == NULL)
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=49847
+
+--- trunk/gcc/ChangeLog	2014/02/27 17:06:35	208202
++++ trunk/gcc/ChangeLog	2014/02/27 19:02:18	208203
+@@ -1,6 +1,15 @@
+ 	* tree-vect-loop.c (vect_is_simple_reduction_1): Do not consider
+ 	dead PHIs a reduction.
+ 
++2014-02-27  Mikael Pettersson  <mikpe@it.uu.se>
++	    Jeff Law  <law@redhat.com>
++
++	PR rtl-optimization/49847
++	* cse.c (fold_rtx) Handle case where cc0 setter and cc0 user
++	are in different blocks.
++	* doc/tm.texi (Condition Code Status): Update documention for
++	relative locations of cc0-setter and cc0-user.
++
+ 2014-02-25  Richard Biener  <rguenther@suse.de>
+ 
+ 	Backport from mainline
+--- trunk/gcc/cse.c	2014/02/27 17:06:35	208202
++++ trunk/gcc/cse.c	2014/02/27 19:02:18	208203
+@@ -3194,9 +3194,27 @@ fold_rtx (rtx x, rtx insn)
+ 
+ #ifdef HAVE_cc0
+ 	  case CC0:
+-	    folded_arg = prev_insn_cc0;
+-	    mode_arg = prev_insn_cc0_mode;
+-	    const_arg = equiv_constant (folded_arg);
++	    /* The cc0-user and cc0-setter may be in different blocks if
++	       the cc0-setter potentially traps.  In that case PREV_INSN_CC0
++	       will have been cleared as we exited the block with the
++	       setter.
++
++	       While we could potentially track cc0 in this case, it just
++	       doesn't seem to be worth it given that cc0 targets are not
++	       terribly common or important these days and trapping math
++	       is rarely used.  The combination of those two conditions
++	       necessary to trip this situation is exceedingly rare in the
++	       real world.  */
++	    if (!prev_insn_cc0)
++	      {
++		const_arg = 0;
++	      }
++	    else
++	      {
++		folded_arg = prev_insn_cc0;
++		mode_arg = prev_insn_cc0_mode;
++		const_arg = equiv_constant (folded_arg);
++	      }
+ 	    break;
+ #endif
+ 
+--- trunk/gcc/doc/tm.texi.in	2014/02/27 17:06:35	208202
++++ trunk/gcc/doc/tm.texi.in	2014/02/27 19:02:18	208203
+@@ -5900,8 +5900,13 @@
+ most RISC machines.
+ 
+ The implicit clobbering poses a strong restriction on the placement of
+-the definition and use of the condition code, which need to be in adjacent
+-insns for machines using @code{(cc0)}.  This can prevent important
++the definition and use of the condition code.  In the past the definition
++and use were always adjacent.  However, recent changes to support trapping
++arithmatic may result in the definition and user being in different blocks.
++Thus, there may be a @code{NOTE_INSN_BASIC_BLOCK} between them.  Additionally,
++the definition may be the source of exception handling edges.
++
++These restrictions can prevent important
+ optimizations on some machines.  For example, on the IBM RS/6000, there
+ is a delay for taken branches unless the condition code register is set
+ three instructions earlier than the conditional branch.  The instruction
+--- /dev/null
++++ trunk/gcc/testsuite/g++.dg/pr49847.C	2014/02/27 19:02:18	208203
+@@ -0,0 +1,7 @@
++/* { dg-do compile } */
++/* { dg-options "-O -fnon-call-exceptions" } */
++int f (float g)
++{
++  try { return g >= 0; }
++  catch (...) {}
++}
