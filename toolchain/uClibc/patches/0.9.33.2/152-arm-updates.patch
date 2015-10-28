@@ -1,0 +1,68 @@
+ARM: Updates from upstream
+
+ 0eaaf662 ldso: use .arm mode for resolver unconditionally
+ 0a718a01 arm: avoid 2 compiler warnings
+ 09055cc1 nptl: Fix arm pt-vfork
+ f7db1709 libc: add guard for arm thumb2 asm
+
+diff --git a/ldso/ldso/arm/resolve.S b/ldso/ldso/arm/resolve.S
+--- a/ldso/ldso/arm/resolve.S
++++ b/ldso/ldso/arm/resolve.S
+@@ -101,7 +101,7 @@
+ 
+  .text
+  .align 4      @ 16 byte boundary and there are 32 bytes below (arm case)
+- #if !defined(__thumb__) || defined(__thumb2__)
++#if 1 /*(!defined(__thumb__) || defined __THUMB_INTERWORK__) || defined(__thumb2__)*/
+  .arm
+  .globl _dl_linux_resolve
+  .type _dl_linux_resolve,%function
+diff --git a/libc/sysdeps/linux/arm/aeabi_assert.c b/libc/sysdeps/linux/arm/aeabi_assert.c
+--- a/libc/sysdeps/linux/arm/aeabi_assert.c
++++ b/libc/sysdeps/linux/arm/aeabi_assert.c
+@@ -21,7 +21,7 @@
+ #include <stdlib.h>
+ 
+ 
+-void __aeabi_assert(const char *assertion, const char *file, unsigned int line);
++void __aeabi_assert(const char *assertion, const char *file, unsigned int line) attribute_noreturn;
+ void __aeabi_assert(const char *assertion, const char *file, unsigned int line)
+ {
+   __assert (assertion, file, line, NULL);
+diff --git a/libc/sysdeps/linux/arm/aeabi_mb_cur_max.c b/libc/sysdeps/linux/arm/aeabi_mb_cur_max.c
+--- a/libc/sysdeps/linux/arm/aeabi_mb_cur_max.c
++++ b/libc/sysdeps/linux/arm/aeabi_mb_cur_max.c
+@@ -20,8 +20,8 @@
+ #include <locale.h>
+ #include <stdlib.h>
+ 
+-int
+-__aeabi_MB_CUR_MAX (void)
++int __aeabi_MB_CUR_MAX (void);
++int __aeabi_MB_CUR_MAX (void)
+ {
+   return MB_CUR_MAX;
+ }
+diff --git a/libc/sysdeps/linux/arm/bits/arm_asm.h b/libc/sysdeps/linux/arm/bits/arm_asm.h
+--- a/libc/sysdeps/linux/arm/bits/arm_asm.h
++++ b/libc/sysdeps/linux/arm/bits/arm_asm.h
+@@ -3,8 +3,10 @@
+ #define _ARM_ASM_H
+ 
+ #ifdef __thumb2__
++# ifdef __ASSEMBLER__
+ .thumb
+ .syntax unified
++# endif /* __ASSEMBLER__ */
+ #define IT(t, cond) i##t cond
+ #else
+ /* XXX: This can be removed if/when we require an assembler that supports
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/arm/pt-vfork.S b/libpthread/nptl/sysdeps/unix/sysv/linux/arm/pt-vfork.S
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/arm/pt-vfork.S
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/arm/pt-vfork.S
+@@ -35,4 +35,4 @@
+ 	cmp	r0, #0;			/* If we are the parent... */	\
+ 	strne	r3, [r2, #PID_OFFSET]	/* ... restore the saved PID.  */
+ 
+-#INCLUDE <../../../../../../../LIBC/SYSDEPS/LINUX/ARM/VFORK.S>
++#include "../../../../../../../libc/sysdeps/linux/arm/vfork.S"

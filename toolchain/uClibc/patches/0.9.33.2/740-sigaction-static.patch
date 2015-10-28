@@ -1,0 +1,303 @@
+Fix sigaction static linking against libpthread
+
+ db19d8d0 signal.h: provide prototype for __libc_sigaction and remove all others
+ 27fbcf79 signal.h: move prototypes for __syscall_[rt_]sigaction to common place
+ 9c4fce55 nptl: remove sigaction, sigprocmask, and sigfillset from libpthread
+
+---
+diff --git a/include/signal.h b/include/signal.h
+--- a/include/signal.h
++++ b/include/signal.h
+@@ -290,7 +290,28 @@ libc_hidden_proto(sigsuspend)
+ /* Get and/or set the action for signal SIG.  */
+ extern int sigaction (int __sig, __const struct sigaction *__restrict __act,
+ 		      struct sigaction *__restrict __oact) __THROW;
++#ifdef _LIBC
++# if 0 /* this is in headers */
++/* In uclibc, userspace struct sigaction is identical to
++ * "new" struct kernel_sigaction (one from the Linux 2.1.68 kernel).
++ * See sigaction.h
++ */
++struct old_kernel_sigaction;
++extern int __syscall_sigaction(int, __const struct old_kernel_sigaction *,
++	struct old_kernel_sigaction *) attribute_hidden;
++# else /* this is how the function is built */
++extern __typeof(sigaction) __syscall_sigaction attribute_hidden;
++# endif
++/* candidate for attribute_hidden, if NPTL would behave */
++extern int __syscall_rt_sigaction(int, __const struct sigaction *,
++	struct sigaction *, size_t)
++# ifndef __UCLIBC_HAS_THREADS_NATIVE__
++		attribute_hidden
++# endif
++	;
++extern __typeof(sigaction) __libc_sigaction;
+ libc_hidden_proto(sigaction)
++#endif
+ 
+ /* Put in SET all signals that are blocked and waiting to be delivered.  */
+ extern int sigpending (sigset_t *__set) __THROW __nonnull ((1));
+diff --git a/libc/signal/sigaction.c b/libc/signal/sigaction.c
+--- a/libc/signal/sigaction.c
++++ b/libc/signal/sigaction.c
+@@ -24,11 +24,6 @@
+ 
+ #include <bits/kernel_sigaction.h>
+ 
+-#ifndef LIBC_SIGACTION
+-extern __typeof(sigaction) __libc_sigaction;
+-#endif
+-
+-
+ #if defined __NR_rt_sigaction
+ 
+ /* If ACT is not NULL, change the action for SIG to *ACT.
+diff --git a/libc/sysdeps/linux/alpha/bits/kernel_sigaction.h b/libc/sysdeps/linux/alpha/bits/kernel_sigaction.h
+--- a/libc/sysdeps/linux/alpha/bits/kernel_sigaction.h
++++ b/libc/sysdeps/linux/alpha/bits/kernel_sigaction.h
+@@ -9,12 +9,4 @@ struct old_kernel_sigaction {
+ 	unsigned int sa_flags;
+ };
+ 
+-/* In uclibc, userspace struct sigaction is identical to
+- * "new" struct kernel_sigaction (one from the Linux 2.1.68 kernel).
+- * See sigaction.h
+- */
+-
+-extern int __syscall_rt_sigaction (int, const struct sigaction *,
+-	struct sigaction *, size_t) attribute_hidden;
+-
+ #endif
+diff --git a/libc/sysdeps/linux/arm/sigaction.c b/libc/sysdeps/linux/arm/sigaction.c
+--- a/libc/sysdeps/linux/arm/sigaction.c
++++ b/libc/sysdeps/linux/arm/sigaction.c
+@@ -29,8 +29,6 @@
+ extern void __default_sa_restorer(void);
+ extern void __default_rt_sa_restorer(void);
+ 
+-extern __typeof(sigaction) __libc_sigaction;
+-
+ /* When RT signals are in use we need to use a different return stub.  */
+ #ifdef __NR_rt_sigreturn
+ #define choose_restorer(flags)					\
+diff --git a/libc/sysdeps/linux/avr32/sigaction.c b/libc/sysdeps/linux/avr32/sigaction.c
+--- a/libc/sysdeps/linux/avr32/sigaction.c
++++ b/libc/sysdeps/linux/avr32/sigaction.c
+@@ -14,8 +14,6 @@
+ #define SA_RESTORER	0x04000000
+ extern void __default_rt_sa_restorer(void);
+ 
+-extern __typeof(sigaction) __libc_sigaction;
+-
+ /*
+  * If act is not NULL, change the action for sig to *act.
+  * If oact is not NULL, put the old action for sig in *oact.
+diff --git a/libc/sysdeps/linux/c6x/sigaction.c b/libc/sysdeps/linux/c6x/sigaction.c
+--- a/libc/sysdeps/linux/c6x/sigaction.c
++++ b/libc/sysdeps/linux/c6x/sigaction.c
+@@ -34,8 +34,6 @@
+ 
+ #define SA_RESTORER	0x04000000
+ 
+-extern __typeof(sigaction) __libc_sigaction;
+-
+ extern void restore_rt(void) __asm__ ("__restore_rt") attribute_hidden;
+ extern void restore(void) __asm__ ("__restore") attribute_hidden;
+ 
+diff --git a/libc/sysdeps/linux/common/__syscall_rt_sigaction.c b/libc/sysdeps/linux/common/__syscall_rt_sigaction.c
+--- a/libc/sysdeps/linux/common/__syscall_rt_sigaction.c
++++ b/libc/sysdeps/linux/common/__syscall_rt_sigaction.c
+@@ -12,11 +12,8 @@
+ #ifdef __NR_rt_sigaction
+ #include <signal.h>
+ 
+-int __syscall_rt_sigaction (int __signum, const struct sigaction *__act,
+-							struct sigaction *__oldact, size_t __size);
+-
+ #define __NR___syscall_rt_sigaction __NR_rt_sigaction
+ _syscall4(int, __syscall_rt_sigaction, int, signum,
+-		  const struct sigaction *, act, struct sigaction *, oldact,
+-		  size_t, size)
++	  const struct sigaction *, act, struct sigaction *, oldact,
++	  size_t, size)
+ #endif
+diff --git a/libc/sysdeps/linux/common/__syscall_sigaction.c b/libc/sysdeps/linux/common/__syscall_sigaction.c
+--- a/libc/sysdeps/linux/common/__syscall_sigaction.c
++++ b/libc/sysdeps/linux/common/__syscall_sigaction.c
+@@ -12,8 +12,7 @@
+ #ifndef __NR_rt_sigaction
+ #define __NR___syscall_sigaction __NR_sigaction
+ #include <signal.h>
+-int __syscall_sigaction (int __signum, const struct sigaction *__act, struct sigaction *__oldact) attribute_hidden;
+ _syscall3(int, __syscall_sigaction, int, signum, const struct sigaction *,
+-		  act, struct sigaction *, oldact)
++	  act, struct sigaction *, oldact)
+ #endif
+ 
+diff --git a/libc/sysdeps/linux/common/bits/kernel_sigaction.h b/libc/sysdeps/linux/common/bits/kernel_sigaction.h
+--- a/libc/sysdeps/linux/common/bits/kernel_sigaction.h
++++ b/libc/sysdeps/linux/common/bits/kernel_sigaction.h
+@@ -19,18 +19,6 @@ struct old_kernel_sigaction {
+ 	unsigned long sa_flags;
+ 	void (*sa_restorer)(void);
+ };
+-/* In uclibc, userspace struct sigaction is identical to
+- * "new" struct kernel_sigaction (one from the Linux 2.1.68 kernel).
+- * See sigaction.h
+- */
+-
+-extern int __syscall_sigaction(int, const struct old_kernel_sigaction *,
+-	struct old_kernel_sigaction *);
+-
+ #endif
+ 
+-
+-extern int __syscall_rt_sigaction(int, const struct sigaction *,
+-	struct sigaction *, size_t);
+-
+ #endif /* _BITS_SIGACTION_STRUCT_H */
+diff --git a/libc/sysdeps/linux/hppa/bits/kernel_sigaction.h b/libc/sysdeps/linux/hppa/bits/kernel_sigaction.h
+--- a/libc/sysdeps/linux/hppa/bits/kernel_sigaction.h
++++ b/libc/sysdeps/linux/hppa/bits/kernel_sigaction.h
+@@ -12,12 +12,4 @@ struct old_kernel_sigaction {
+ 	unsigned long sa_flags;
+ };
+ 
+-/* In uclibc, userspace struct sigaction is identical to
+- * "new" struct kernel_sigaction (one from the Linux 2.1.68 kernel).
+- * See sigaction.h
+- */
+-
+-extern int __syscall_rt_sigaction (int, const struct sigaction *,
+-	struct sigaction *, size_t) attribute_hidden;
+-
+ #endif
+diff --git a/libc/sysdeps/linux/i386/sigaction.c b/libc/sysdeps/linux/i386/sigaction.c
+--- a/libc/sysdeps/linux/i386/sigaction.c
++++ b/libc/sysdeps/linux/i386/sigaction.c
+@@ -27,9 +27,6 @@
+ 
+ #define SA_RESTORER	0x04000000
+ 
+-extern __typeof(sigaction) __libc_sigaction;
+-
+-
+ #if defined __NR_rt_sigaction
+ 
+ extern void restore_rt(void) __asm__ ("__restore_rt") attribute_hidden;
+diff --git a/libc/sysdeps/linux/mips/bits/kernel_sigaction.h b/libc/sysdeps/linux/mips/bits/kernel_sigaction.h
+--- a/libc/sysdeps/linux/mips/bits/kernel_sigaction.h
++++ b/libc/sysdeps/linux/mips/bits/kernel_sigaction.h
+@@ -24,12 +24,4 @@ struct old_kernel_sigaction {
+ #endif
+ };
+ 
+-/* In uclibc, userspace struct sigaction is identical to
+- * "new" struct kernel_sigaction (one from the Linux 2.1.68 kernel).
+- * See sigaction.h
+- */
+-
+-extern int __syscall_rt_sigaction (int, const struct sigaction *,
+-	struct sigaction *, size_t) attribute_hidden;
+-
+ #endif
+diff --git a/libc/sysdeps/linux/mips/sigaction.c b/libc/sysdeps/linux/mips/sigaction.c
+--- a/libc/sysdeps/linux/mips/sigaction.c
++++ b/libc/sysdeps/linux/mips/sigaction.c
+@@ -27,9 +27,6 @@
+ 
+ #define SA_RESTORER	0x04000000
+ 
+-extern __typeof(sigaction) __libc_sigaction;
+-
+-
+ #ifdef __NR_rt_sigaction
+ 
+ # if _MIPS_SIM != _ABIO32
+diff --git a/libc/sysdeps/linux/x86_64/sigaction.c b/libc/sysdeps/linux/x86_64/sigaction.c
+--- a/libc/sysdeps/linux/x86_64/sigaction.c
++++ b/libc/sysdeps/linux/x86_64/sigaction.c
+@@ -30,9 +30,6 @@
+ /* We do not globally define the SA_RESTORER flag so do it here.  */
+ #define SA_RESTORER 0x04000000
+ 
+-extern __typeof(sigaction) __libc_sigaction;
+-
+-
+ #ifdef __NR_rt_sigaction
+ 
+ /* Using the hidden attribute here does not change the code but it
+diff --git a/libpthread/linuxthreads/pthread.c b/libpthread/linuxthreads/pthread.c
+--- a/libpthread/linuxthreads/pthread.c
++++ b/libpthread/linuxthreads/pthread.c
+@@ -37,9 +37,6 @@
+ # error "This must not happen"
+ #endif
+ 
+-/* mods for uClibc: __libc_sigaction is not in any standard headers */
+-extern __typeof(sigaction) __libc_sigaction;
+-
+ #if !(USE_TLS && HAVE___THREAD)
+ /* These variables are used by the setup code.  */
+ extern int _errno;
+diff --git a/libpthread/linuxthreads/signals.c b/libpthread/linuxthreads/signals.c
+--- a/libpthread/linuxthreads/signals.c
++++ b/libpthread/linuxthreads/signals.c
+@@ -20,9 +20,6 @@
+ #include "internals.h"
+ #include "spinlock.h"
+ 
+-/* mods for uClibc: __libc_sigaction is not in any standard headers */
+-extern __typeof(sigaction) __libc_sigaction;
+-
+ int pthread_sigmask(int how, const sigset_t * newmask, sigset_t * oldmask)
+ {
+   sigset_t mask;
+diff --git a/libpthread/linuxthreads.old/pthread.c b/libpthread/linuxthreads.old/pthread.c
+--- a/libpthread/linuxthreads.old/pthread.c
++++ b/libpthread/linuxthreads.old/pthread.c
+@@ -38,8 +38,6 @@
+ #include <sys/types.h>
+ #include <sys/syscall.h>
+ 
+-/* mods for uClibc: __libc_sigaction is not in any standard headers */
+-extern __typeof(sigaction) __libc_sigaction;
+ libpthread_hidden_proto(waitpid)
+ libpthread_hidden_proto(raise)
+ 
+diff --git a/libpthread/linuxthreads.old/signals.c b/libpthread/linuxthreads.old/signals.c
+--- a/libpthread/linuxthreads.old/signals.c
++++ b/libpthread/linuxthreads.old/signals.c
+@@ -22,9 +22,6 @@
+ #include "spinlock.h"
+ #include <bits/sigcontextinfo.h>
+ 
+-/* mods for uClibc: __libc_sigaction is not in any standard headers */
+-extern __typeof(sigaction) __libc_sigaction;
+-
+ int pthread_sigmask(int how, const sigset_t * newmask, sigset_t * oldmask)
+ {
+   sigset_t mask;
+diff --git a/libpthread/nptl/init.c b/libpthread/nptl/init.c
+--- a/libpthread/nptl/init.c
++++ b/libpthread/nptl/init.c
+@@ -35,7 +35,6 @@
+ #include <lowlevellock.h>
+ #include <bits/kernel-features.h>
+ #include <stdio.h>
+-extern __typeof(sigaction) __libc_sigaction;
+ 
+ /* Size and alignment of static TLS block.  */
+ size_t __static_tls_size;
+diff --git a/libpthread/nptl/sysdeps/pthread/Makefile.in b/libpthread/nptl/sysdeps/pthread/Makefile.in
+--- a/libpthread/nptl/sysdeps/pthread/Makefile.in
++++ b/libpthread/nptl/sysdeps/pthread/Makefile.in
+@@ -33,7 +33,6 @@ libpthread_pthread_CSRC = \
+ 	pthread_spin_init.c \
+ 	pthread_spin_unlock.c \
+ 	pt-longjmp.c \
+-	pt-sigaction.c \
+ 	tpp.c
+ CFLAGS-pthread = $(SSP_ALL_CFLAGS) -DNOT_IN_libc -DIS_IN_libpthread
+ CFLAGS-pthread_barrier_wait.c = -D_GNU_SOURCE
+-- 

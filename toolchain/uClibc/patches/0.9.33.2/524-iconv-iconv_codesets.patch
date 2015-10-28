@@ -1,0 +1,57 @@
+From d46dc8bc88e38251bfa3712efe7abf62933f5419 Mon Sep 17 00:00:00 2001
+From: Peter S. Mazinger <ps.m@gmx.net>
+Date: Thu, 24 Mar 2011 00:15:25 +0000
+Subject: iconv: Do not include __iconv_codesets into iconv utility
+
+Host iconv needs only L_iconv_main defined and __iconv_codesets
+has to included, as host system does not provide it.
+Keep __iconv_codesets out of iconv linked against uClibc.
+
+Signed-off-by: Peter S. Mazinger <ps.m@gmx.net>
+Signed-off-by: Bernhard Reutner-Fischer <rep.dot.nop@gmail.com>
+---
+diff --git a/libc/misc/wchar/wchar.c b/libc/misc/wchar/wchar.c
+--- a/libc/misc/wchar/wchar.c
++++ b/libc/misc/wchar/wchar.c
+@@ -1196,6 +1196,9 @@ libc_hidden_proto(__iconv_codesets)
+ #endif
+ 
+ #if defined L_iconv || defined L_iconv_main
++# ifdef L_iconv_main
++static
++# endif
+ const unsigned char __iconv_codesets[] =
+ 	"\x0a\xe0""WCHAR_T\x00"		/* superset of UCS-4 but platform-endian */
+ #if __BYTE_ORDER == __BIG_ENDIAN
+diff --git a/utils/Makefile.in b/utils/Makefile.in
+--- a/utils/Makefile.in
++++ b/utils/Makefile.in
+@@ -36,8 +36,7 @@ CFLAGS-ldd := $(CFLAGS-utils-shared) -DBUILDING_LINKAGE
+ # Need CFLAGS-utils explicitly, because the source file is not located in utils
+ CFLAGS-iconv := $(CFLAGS-utils) \
+     $(CFLAGS-utils-shared) \
+-    -I$(top_srcdir)libc/misc/wchar \
+-    -DL_iconv_main \
++    -I$(top_srcdir)libc/misc/wchar
+ 
+ CFLAGS-locale := $(CFLAGS-utils)
+ CFLAGS-getconf :=$(CFLAGS-utils) \
+diff --git a/utils/iconv.c b/utils/iconv.c
+--- a/utils/iconv.c
++++ b/utils/iconv.c
+@@ -108,7 +108,12 @@
+ #include <wchar.h>
+ #include "wchar.c" /* for _UC_iconv_t and __iconv_codesets */
+ 
+-extern const unsigned char __iconv_codesets[];
++#ifdef L_iconv_main
++static
++#else
++extern
++#endif
++const unsigned char __iconv_codesets[];
+ 
+ #define IBUF BUFSIZ
+ #define OBUF BUFSIZ
+--
+cgit v0.9.1

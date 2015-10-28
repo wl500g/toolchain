@@ -1,0 +1,186 @@
+hide internal symbols
+
+ c5bebf94 make __uClibc_fini() hidden
+ b2b5d473 __uClibc_main.c: make __uClibc_init hidden
+ a5de87e5 libdl.c: hide dl_cleanup
+ a9b153b6 resolv.c,time.c,_atexit.c: hide 3 locks
+ fee40347 getpagesize.c, unistd.h: hide __pagesize
+ 7431f726 malloc.h: hide internal functions (mainly debug related)
+---
+
+diff --git a/include/unistd.h b/include/unistd.h
+--- a/include/unistd.h
++++ b/include/unistd.h
+@@ -1194,6 +1194,7 @@ __END_DECLS
+ #endif
+ typedef signed smallint_type smallint;
+ typedef unsigned smallint_type smalluint;
++extern size_t __pagesize attribute_hidden;
+ #endif
+ 
+ 
+diff --git a/ldso/libdl/libdl.c b/ldso/libdl/libdl.c
+--- a/ldso/libdl/libdl.c
++++ b/ldso/libdl/libdl.c
+@@ -269,7 +269,7 @@ remove_slotinfo(size_t idx, struct dtv_slotinfo_list *listp, size_t disp,
+ #endif
+ 
+ #ifndef __LDSO_NO_CLEANUP__
+-void dl_cleanup(void) __attribute__ ((destructor));
++void dl_cleanup(void) attribute_hidden __attribute__ ((destructor));
+ void dl_cleanup(void)
+ {
+ 	struct dyn_elf *h, *n;
+diff --git a/libc/inet/resolv.c b/libc/inet/resolv.c
+--- a/libc/inet/resolv.c
++++ b/libc/inet/resolv.c
+@@ -407,7 +407,7 @@ typedef union sockaddr46_t {
+ } sockaddr46_t;
+ 
+ 
+-__UCLIBC_MUTEX_EXTERN(__resolv_lock);
++__UCLIBC_MUTEX_EXTERN(__resolv_lock) attribute_hidden;
+ 
+ /* Protected by __resolv_lock */
+ extern void (*__res_sync)(void) attribute_hidden;
+diff --git a/libc/misc/internals/__uClibc_main.c b/libc/misc/internals/__uClibc_main.c
+--- a/libc/misc/internals/__uClibc_main.c
++++ b/libc/misc/internals/__uClibc_main.c
+@@ -222,8 +222,7 @@ static int __check_suid(void)
+  * __uClibc_main.
+  */
+ 
+-extern void __uClibc_init(void);
+-libc_hidden_proto(__uClibc_init)
++extern void __uClibc_init(void) attribute_hidden;
+ void __uClibc_init(void)
+ {
+     /* Don't recurse */
+@@ -276,7 +275,6 @@ void __uClibc_init(void)
+ 	_stdio_init();
+ 
+ }
+-libc_hidden_def(__uClibc_init)
+ 
+ #ifdef __UCLIBC_CTOR_DTOR__
+ void attribute_hidden (*__app_fini)(void) = NULL;
+@@ -284,8 +282,7 @@ void attribute_hidden (*__app_fini)(void) = NULL;
+ 
+ void attribute_hidden (*__rtld_fini)(void) = NULL;
+ 
+-extern void __uClibc_fini(void);
+-libc_hidden_proto(__uClibc_fini)
++extern void __uClibc_fini(void) attribute_hidden;
+ void __uClibc_fini(void)
+ {
+ #ifdef __UCLIBC_CTOR_DTOR__
+@@ -304,7 +301,6 @@ void __uClibc_fini(void)
+     if (__rtld_fini != NULL)
+ 	(__rtld_fini)();
+ }
+-libc_hidden_def(__uClibc_fini)
+ 
+ #ifndef SHARED
+ extern void __nptl_deallocate_tsd (void) __attribute ((weak));
+diff --git a/libc/misc/time/time.c b/libc/misc/time/time.c
+--- a/libc/misc/time/time.c
++++ b/libc/misc/time/time.c
+@@ -228,7 +228,7 @@ typedef struct {
+ 	char tzname[TZNAME_MAX+1];
+ } rule_struct;
+ 
+-__UCLIBC_MUTEX_EXTERN(_time_tzlock);
++__UCLIBC_MUTEX_EXTERN(_time_tzlock) attribute_hidden;
+ 
+ extern rule_struct _time_tzinfo[2] attribute_hidden;
+ 
+diff --git a/libc/stdlib/_atexit.c b/libc/stdlib/_atexit.c
+--- a/libc/stdlib/_atexit.c
++++ b/libc/stdlib/_atexit.c
+@@ -44,7 +44,7 @@
+ #include <atomic.h>
+ 
+ #include <bits/uClibc_mutex.h>
+-__UCLIBC_MUTEX_EXTERN(__atexit_lock);
++__UCLIBC_MUTEX_EXTERN(__atexit_lock) attribute_hidden;
+ 
+ 
+ 
+@@ -328,8 +328,7 @@ extern void weak_function _stdio_term(void) attribute_hidden;
+ attribute_hidden void (*__exit_cleanup)(int) = 0;
+ __UCLIBC_MUTEX_INIT(__atexit_lock, PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP);
+ 
+-extern void __uClibc_fini(void);
+-libc_hidden_proto(__uClibc_fini)
++extern void __uClibc_fini(void) attribute_hidden;
+ 
+ /*
+  * Normal program termination
+diff --git a/libc/stdlib/malloc-standard/mallinfo.c b/libc/stdlib/malloc-standard/mallinfo.c
+--- a/libc/stdlib/malloc-standard/mallinfo.c
++++ b/libc/stdlib/malloc-standard/mallinfo.c
+@@ -15,6 +15,7 @@
+ */
+ 
+ #include "malloc.h"
++#include <stdio.h>	/* fprintf */
+ 
+ 
+ /* ------------------------------ mallinfo ------------------------------ */
+diff --git a/libc/stdlib/malloc-standard/malloc.h b/libc/stdlib/malloc-standard/malloc.h
+--- a/libc/stdlib/malloc-standard/malloc.h
++++ b/libc/stdlib/malloc-standard/malloc.h
+@@ -26,7 +26,11 @@
+ 
+ 
+ 
+-__UCLIBC_MUTEX_EXTERN(__malloc_lock);
++__UCLIBC_MUTEX_EXTERN(__malloc_lock)
++#if defined __UCLIBC_HAS_THREADS__ && !defined __LINUXTHREADS_OLD__
++	attribute_hidden
++#endif
++	;
+ #define __MALLOC_LOCK		__UCLIBC_MUTEX_LOCK(__malloc_lock)
+ #define __MALLOC_UNLOCK		__UCLIBC_MUTEX_UNLOCK(__malloc_lock)
+ 
+@@ -910,7 +914,7 @@ typedef struct malloc_state *mstate;
+    malloc relies on the property that malloc_state is initialized to
+    all zeroes (as is true of C statics).
+ */
+-extern struct malloc_state __malloc_state;  /* never directly referenced */
++extern struct malloc_state __malloc_state attribute_hidden;  /* never directly referenced */
+ 
+ /*
+    All uses of av_ are via get_malloc_state().
+@@ -947,12 +951,12 @@ void   __malloc_consolidate(mstate) attribute_hidden;
+ #define check_malloced_chunk(P,N)   __do_check_malloced_chunk(P,N)
+ #define check_malloc_state()        __do_check_malloc_state()
+ 
+-extern void __do_check_chunk(mchunkptr p);
+-extern void __do_check_free_chunk(mchunkptr p);
+-extern void __do_check_inuse_chunk(mchunkptr p);
+-extern void __do_check_remalloced_chunk(mchunkptr p, size_t s);
+-extern void __do_check_malloced_chunk(mchunkptr p, size_t s);
+-extern void __do_check_malloc_state(void);
++extern void __do_check_chunk(mchunkptr p) attribute_hidden;
++extern void __do_check_free_chunk(mchunkptr p) attribute_hidden;
++extern void __do_check_inuse_chunk(mchunkptr p) attribute_hidden;
++extern void __do_check_remalloced_chunk(mchunkptr p, size_t s) attribute_hidden;
++extern void __do_check_malloced_chunk(mchunkptr p, size_t s) attribute_hidden;
++extern void __do_check_malloc_state(void) attribute_hidden;
+ 
+ #include <assert.h>
+ 
+diff --git a/libc/sysdeps/linux/common/getpagesize.c b/libc/sysdeps/linux/common/getpagesize.c
+--- a/libc/sysdeps/linux/common/getpagesize.c
++++ b/libc/sysdeps/linux/common/getpagesize.c
+@@ -20,8 +20,6 @@
+ #include <features.h>
+ #include <sys/param.h>
+ 
+-extern size_t __pagesize;
+-
+ /* Return the system page size.  */
+ /* couldn't make __getpagesize hidden, because shm.h uses it in a macro */
+ extern __typeof(getpagesize) __getpagesize;
+-- 

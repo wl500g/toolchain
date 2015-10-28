@@ -1,0 +1,201 @@
+dlopen: Upstream fixes
+
+ 6239e4c69d Fix some fragileness in dlopen/do_dlopen wrapper & worker pair.
+ f74663a2e6 libc: deal with aux vect inside __uClibc_main only if !SHARED
+ 231e4a9b4b libdl: fix dlopen implementation from statically linked application
+ 215c2868ac libc: elf: explicitly include uClibc_page.h to make PAGE_SIZE visible
+
+---
+
+diff --git a/ldso/ldso/ldso.c b/ldso/ldso/ldso.c
+--- a/ldso/ldso/ldso.c
++++ b/ldso/ldso/ldso.c
+@@ -64,7 +64,7 @@ struct elf_resolve *_dl_trace_prelink_map    = NULL;	/* Library module for preli
+ bool _dl_verbose				= true;					/* On by default */
+ bool prelinked					= false;
+ #endif
+-static int _dl_secure = 1; /* Are we dealing with setuid stuff? */
++int _dl_secure = 1; /* Are we dealing with setuid stuff? */
+ 
+ #ifdef __SUPPORT_LD_DEBUG__
+ char *_dl_debug           = NULL;
+diff --git a/ldso/libdl/libdl.c b/ldso/libdl/libdl.c
+--- a/ldso/libdl/libdl.c
++++ b/ldso/libdl/libdl.c
+@@ -296,11 +296,10 @@ static ptrdiff_t _dl_build_local_scope (struct elf_resolve **list,
+ 	return p - list;
+ }
+ 
+-static void *do_dlopen(const char *libname, int flag)
++static void *do_dlopen(const char *libname, int flag, ElfW(Addr) from)
+ {
+ 	struct elf_resolve *tpnt, *tfrom;
+ 	struct dyn_elf *dyn_chain, *rpnt = NULL, *dyn_ptr, *relro_ptr, *handle;
+-	ElfW(Addr) from;
+ 	struct elf_resolve *tpnt1;
+ 	void (*dl_brk) (void);
+ 	int now_flag;
+@@ -320,8 +319,6 @@ static void *do_dlopen(const char *libname, int flag)
+ 		return NULL;
+ 	}
+ 
+-	from = (ElfW(Addr)) __builtin_return_address(0);
+-
+ 	if (!_dl_init) {
+ 		_dl_init = true;
+ 		_dl_malloc_function = malloc;
+@@ -377,7 +374,7 @@ static void *do_dlopen(const char *libname, int flag)
+ 	if (getenv("LD_BIND_NOW"))
+ 		now_flag = RTLD_NOW;
+ 
+-#if !defined SHARED && defined __LDSO_LIBRARY_PATH__
++#if !defined SHARED && defined __LDSO_LD_LIBRARY_PATH__
+ 	/* When statically linked, the _dl_library_path is not yet initialized */
+ 	_dl_library_path = getenv("LD_LIBRARY_PATH");
+ #endif
+@@ -544,11 +541,18 @@ static void *do_dlopen(const char *libname, int flag)
+ 	 * to the GOT tables.  We need to do this in reverse order so that COPY
+ 	 * directives work correctly */
+ 
+-	/* Get the tail of the list */
++#ifdef SHARED
++	/*
++	 * Get the tail of the list.
++	 * In the static case doesn't need to extend the global scope, it is
++	 * ready to be used as it is, because _dl_loaded_modules already points
++	 * to the dlopened library.
++	 */
+ 	for (ls = &_dl_loaded_modules->symbol_scope; ls && ls->next; ls = ls->next);
+ 
+ 	/* Extend the global scope by adding the local scope of the dlopened DSO. */
+ 	ls->next = &dyn_chain->dyn->symbol_scope;
++#endif
+ #ifdef __mips__
+ 	/*
+ 	 * Relocation of the GOT entries for MIPS have to be done
+@@ -661,7 +665,8 @@ void *dlopen(const char *libname, int flag)
+ 	void *ret;
+ 
+ 	__UCLIBC_MUTEX_CONDITIONAL_LOCK(_dl_mutex, 1);
+-	ret = do_dlopen(libname, flag);
++	ret = do_dlopen(libname, flag,
++			(ElfW(Addr)) __builtin_return_address(0));
+ 	__UCLIBC_MUTEX_CONDITIONAL_UNLOCK(_dl_mutex, 1);
+ 
+ 	return ret;
+diff --git a/libc/misc/elf/dl-support.c b/libc/misc/elf/dl-support.c
+--- a/libc/misc/elf/dl-support.c
++++ b/libc/misc/elf/dl-support.c
+@@ -19,6 +19,7 @@
+ #include <ldsodefs.h>
+ #include <string.h>
+ #endif
++#include <bits/uClibc_page.h>
+ 
+ #if defined(USE_TLS) && USE_TLS
+ 
+@@ -28,6 +28,7 @@ void (*_dl_init_static_tls) (struct link_map *) = &_dl_nothread_init_static_tls;
+ 
+ ElfW(Phdr) *_dl_phdr;
+ size_t _dl_phnum;
++size_t _dl_pagesize;
+ 
+ void internal_function _dl_aux_init (ElfW(auxv_t) *av);
+ void internal_function _dl_aux_init (ElfW(auxv_t) *av)
+@@ -37,6 +38,9 @@ void internal_function _dl_aux_init (ElfW(auxv_t) *av)
+ 
+    /* Get the number of program headers from the aux vect */
+    _dl_phnum = (size_t) av[AT_PHNUM].a_un.a_val;
++
++   /* Get the pagesize from the aux vect */
++   _dl_pagesize = (av[AT_PAGESZ].a_un.a_val) ? (size_t) av[AT_PAGESZ].a_un.a_val : PAGE_SIZE;
+ }
+ 
+ #if defined(USE_TLS) && USE_TLS
+diff --git a/libc/misc/internals/__uClibc_main.c b/libc/misc/internals/__uClibc_main.c
+--- a/libc/misc/internals/__uClibc_main.c
++++ b/libc/misc/internals/__uClibc_main.c
+@@ -146,6 +146,11 @@ extern void (*__fini_array_end []) (void) attribute_hidden;
+ # endif
+ #endif
+ 
++#ifdef SHARED
++extern int _dl_secure;
++#endif
++extern size_t _dl_pagesize;
++
+ #if defined (__LDSO_STANDALONE_SUPPORT__) && defined (SHARED) && defined __sh__
+ extern unsigned long _dl_skip_args;
+ #endif
+@@ -192,6 +197,7 @@ static void __check_one_fd(int fd, int mode)
+     }
+ }
+ 
++#ifndef SHARED
+ static int __check_suid(void)
+ {
+     uid_t uid, euid;
+@@ -208,6 +214,7 @@ static int __check_suid(void)
+     return 0; /* we are not suid */
+ }
+ #endif
++#endif
+ 
+ /* __uClibc_init completely initialize uClibc so it is ready to use.
+  *
+@@ -319,7 +326,7 @@ void __uClibc_main(int (*main)(int, char **, char **), int argc,
+ 		    char **argv, void (*app_init)(void), void (*app_fini)(void),
+ 		    void (*rtld_fini)(void), void *stack_end attribute_unused)
+ {
+-#ifndef __ARCH_HAS_NO_LDSO__
++#if !defined __ARCH_HAS_NO_LDSO__ && !defined SHARED
+     unsigned long *aux_dat;
+     ElfW(auxv_t) auxvt[AT_EGID + 1];
+ #endif
+@@ -357,7 +364,7 @@ void __uClibc_main(int (*main)(int, char **, char **), int argc,
+ 	__environ = &argv[argc];
+     }
+ 
+-#ifndef __ARCH_HAS_NO_LDSO__
++#if !defined __ARCH_HAS_NO_LDSO__ && !defined SHARED
+     /* Pull stuff from the ELF header when possible */
+     memset(auxvt, 0x00, sizeof(auxvt));
+     aux_dat = (unsigned long*)__environ;
+@@ -372,13 +379,11 @@ void __uClibc_main(int (*main)(int, char **, char **), int argc,
+ 	}
+ 	aux_dat += 2;
+     }
+-#ifndef SHARED
+     /* Get the program headers (_dl_phdr) from the aux vector
+        It will be used into __libc_setup_tls. */
+ 
+     _dl_aux_init (auxvt);
+ #endif
+-#endif
+ 
+     /* We need to initialize uClibc.  If we are dynamically linked this
+      * may have already been completed by the shared lib loader.  We call
+@@ -386,15 +391,20 @@ void __uClibc_main(int (*main)(int, char **, char **), int argc,
+     __uClibc_init();
+ 
+ #ifndef __ARCH_HAS_NO_LDSO__
+-    /* Make certain getpagesize() gives the correct answer */
+-    __pagesize = (auxvt[AT_PAGESZ].a_un.a_val)? auxvt[AT_PAGESZ].a_un.a_val : PAGE_SIZE;
++    /* Make certain getpagesize() gives the correct answer.
++     * _dl_pagesize is defined into ld.so if SHARED or into libc.a otherwise. */
++    __pagesize = _dl_pagesize;
+ 
++#ifndef SHARED
+     /* Prevent starting SUID binaries where the stdin. stdout, and
+      * stderr file descriptors are not already opened. */
+     if ((auxvt[AT_UID].a_un.a_val == (size_t)-1 && __check_suid()) ||
+ 	    (auxvt[AT_UID].a_un.a_val != (size_t)-1 &&
+ 	    (auxvt[AT_UID].a_un.a_val != auxvt[AT_EUID].a_un.a_val ||
+ 	     auxvt[AT_GID].a_un.a_val != auxvt[AT_EGID].a_un.a_val)))
++#else
++    if (_dl_secure)
++#endif
+     {
+ 	__check_one_fd (STDIN_FILENO, O_RDONLY | O_NOFOLLOW);
+ 	__check_one_fd (STDOUT_FILENO, O_RDWR | O_NOFOLLOW);
+-- 

@@ -38,7 +38,6 @@ config SSP_SUPPORT
 
 config TLS_SUPPORT
 	bool
-	depends UCLIBC_VERSION_0_9_32
 	prompt "Enable Thread-local storage (TLS) support"
 	default n
 	help
