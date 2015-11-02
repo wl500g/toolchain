@@ -34,9 +34,30 @@ Signed-off-by: Nathan Sidwell <nathan@codesourcery.com>
 Signed-off-by: Bernd Schmidt <bernds@codesourcery.com>
 Signed-off-by: Bernhard Reutner-Fischer <rep.dot.nop@gmail.com>
 ---
+
+From b5b89546cac76aeb6d18b36418edda2175f88eca
+From: Peter S. Mazinger <ps.m@gmx.net>
+Date: Thu, 24 Mar 2011 23:56:14 +0000
+Subject: _scanf.c: fix to signedness warnings
+
+Signed-off-by: Peter S. Mazinger <ps.m@gmx.net>
+Signed-off-by: Bernhard Reutner-Fischer <rep.dot.nop@gmail.com>
+---
 diff --git a/libc/stdio/_scanf.c b/libc/stdio/_scanf.c
 --- a/libc/stdio/_scanf.c
 +++ b/libc/stdio/_scanf.c
+@@ -377,9 +377,9 @@ int vswscanf(const wchar_t * __restrict str, const wchar_t * __restrict format,
+ 	FILE f;
+ 
+ 	f.__bufstart =
+-	f.__bufpos = (char *) str;
++	f.__bufpos = (unsigned char *) str;
+ 	f.__bufread =
+-	f.__bufend = (char *)(str + wcslen(str));
++	f.__bufend = (unsigned char *)(str + wcslen(str));
+ 	__STDIO_STREAM_DISABLE_GETC(&f);
+ 	__STDIO_STREAM_DISABLE_PUTC(&f);
+ 
 @@ -429,8 +429,8 @@ libc_hidden_def(vswscanf)
  #define SPEC_CHARS		"npxXoudifFeEgGaACSncs["
  /*                       npxXoudif eEgG  CS cs[ */
