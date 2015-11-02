@@ -1,0 +1,310 @@
+buildsys: Upstream fixes
+
+ 9058b435 buildsys: try to merge all constants
+ 5fe8fc1a buildsys: Do not build crt upon pregen
+ 143b7505 nptl: rephrase *.sym handling
+ 3010966c buildsys: swap V=1 with V=2 command printing
+
+---
+
+diff --git a/Makefile.help b/Makefile.help
+--- a/Makefile.help
++++ b/Makefile.help
+@@ -53,8 +53,8 @@ help:
+ 	@echo 'Environment variables:'
+ 	@echo '  O=<abspath>		- Use <abspath> as object directory'
+ 	@echo '  V="" 			- Quiet build (default)'
+-	@echo '  V=1			- Brief build (show defines, ld flags)'
+-	@echo '  V=2			- Very verbose build'
++	@echo '  V=1			- Very verbose build (show full commands)'
++	@echo '  V=2			- Brief build (show defines, ld flags)'
+ 	@echo '  CROSS_COMPILE=		- Override CROSS_COMPILER_PREFIX from .config'
+ 	@echo '  ARCH= 		- Use given arch for config targets'
+ 	@echo '  SHELL=		- Shell to use for make'
+diff --git a/Makefile.in b/Makefile.in
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -13,7 +13,7 @@ sub_headers := headers
+ 
+ ifeq ($(HAVE_DOT_CONFIG),y)
+ 
+-all: pregen libs
++all: pregen libs startfiles
+ libs: pregen
+ 
+ # In this section, we need .config
+@@ -219,8 +219,6 @@ install: install_runtime install_dev
+ 
+ RUNTIME_PREFIX_LIB_FROM_DEVEL_PREFIX_LIB=$(shell $(top_srcdir)extra/scripts/relative_path.sh $(DEVEL_PREFIX)$(MULTILIB_DIR) $(RUNTIME_PREFIX)$(MULTILIB_DIR))
+ 
+-startfiles: $(crt-y)
+-
+ $(top_builddir)extra/scripts/unifdef: |$(top_builddir)extra/scripts
+ $(top_builddir)extra/scripts/unifdef: $(top_srcdir)extra/scripts/unifdef.c
+ 	$(hcompile.u)
+diff --git a/Makerules b/Makerules
+--- a/Makerules
++++ b/Makerules
+@@ -22,9 +22,9 @@ ifeq ($(UCLIBC_FORMAT_SHARED_FLAT),y)
+ libs: $(lib-gdb-y)
+ endif
+ libs: $(lib-a-y)
+-$(lib-a-y): | $(top_builddir)lib
+ endif
+ objs: all_objs
++$(lib-so-y) $(lib-a-y): | $(top_builddir)lib
+ 
+ shared_objs = $(libc-y:.o=.os) $(libc-shared-y) $(libc-nonshared-y) \
+ 	$(libcrypt-so-y) $(libdl-so-y) \
+@@ -94,7 +94,7 @@ else
+ export MAKE_IS_SILENT := n
+ SECHO := @echo
+ ifneq ($(V)$(VERBOSE),)
+-ifeq ($(V),1)
++ifeq ($(V),2)
+ DISP := bri# brief, like pur but with defines
+ Q := @
+ else
+@@ -451,18 +451,18 @@ CFLAGS-initfini.s := -S -g0 $(PICFLAG) -fno-inline-functions -finhibit-size-dire
+ $(top_builddir)lib/initfini.s: $(top_srcdir)libc/sysdeps/linux/$(TARGET_ARCH)/initfini.c | $(top_builddir)lib
+ 	$(compile.c)
+ 
+-$(top_builddir)lib/defs.h: $(top_builddir)lib/initfini.s | $(top_builddir)lib
+-	$(Q)sed -n -e '/@TESTS_BEGIN/,/@TESTS_END/p' $< | \
+-		gawk -f $(top_srcdir)extra/scripts/defs.awk > $@.tmp
++$(top_builddir)lib/defs.h: $(top_builddir)lib/initfini.s
++	$(do_sed) -n -e '/@TESTS_BEGIN/,/@TESTS_END/p' $< | \
++		$(AWK) -f $(top_srcdir)extra/scripts/defs.awk > $@.tmp
+ 	$(Q)mv $@.tmp $@
+ 
+ $(top_builddir)lib/crti.S: $(top_builddir)lib/initfini.s $(top_builddir)lib/defs.h
+-	$(Q)sed -n -e '1,/@HEADER_ENDS/p' \
++	$(do_sed) -n -e '1,/@HEADER_ENDS/p' \
+ 		-e '/@_.*_PROLOG_BEGINS/,/@_.*_PROLOG_ENDS/p' \
+ 		-e '/@TRAILER_BEGINS/,$$p' $< > $@
+ 
+ $(top_builddir)lib/crtn.S: $(top_builddir)lib/initfini.s
+-	$(Q)sed -n -e '1,/@HEADER_ENDS/p' \
++	$(do_sed) -n -e '1,/@HEADER_ENDS/p' \
+ 		-e '/@_.*_EPILOG_BEGINS/,/@_.*_EPILOG_ENDS/p' \
+ 		-e '/@TRAILER_BEGINS/,$$p' $< > $@
+ 
+@@ -482,9 +482,10 @@ CRTS_COMPAT :=
+ #endif
+ 
+ startfiles = $(CRTS) $(CTOR_TARGETS) $(CRTS_COMPAT) $(CRTRELOC)
+-$(crt-y): $(startfiles)
++startfiles: $(startfiles)
+ $(CRTS) $(CTOR_TARGETS) $(CRTS_COMPAT) $(CRTRELOC): | headers
+-$(CRTS) $(CTOR_TARGETS) $(CRTS_COMPAT) $(CRTRELOC) $(LINK_FLAT_CRTS) $(SHARED_START_FILES) $(SHARED_END_FILES) : | $(top_builddir)lib
++$(CRTS) $(CTOR_TARGETS) $(CRTS_COMPAT) $(CRTRELOC) \
++	$(LINK_FLAT_CRTS) $(SHARED_START_FILES) $(SHARED_END_FILES): | $(top_builddir)lib
+ 
+ $(top_builddir)lib/$(NONSHARED_LIBNAME): $(libc-nonshared-y)
+ 	$(Q)$(RM) $@
+diff --git a/Rules.mak b/Rules.mak
+--- a/Rules.mak
++++ b/Rules.mak
+@@ -296,6 +296,8 @@ CPU_CFLAGS-y := -funsigned-char -fno-builtin
+ 
+ $(eval $(call check-gcc-var,-fno-asm))
+ CPU_CFLAGS-y += $(CFLAG_-fno-asm)
++$(eval $(call check-gcc-var,-fmerge-all-constants))
++CPU_CFLAGS-y += $(CFLAG_-fmerge-all-constants)
+ 
+ LDADD_LIBFLOAT=
+ ifeq ($(UCLIBC_HAS_SOFT_FLOAT),y)
+@@ -796,3 +796,5 @@ SHARED_END_FILES:=$(LIBGCC_DIR)crtendS.o $(top_builddir)lib/crtn.o
+ endif
+ 
+ LOCAL_INSTALL_PATH := install_dir
++
++PTHREAD_GENERATE_MANGLE ?= -n "s/^.*@@@name@@@\([^@]*\)@@@value@@@[^0-9Xxa-fA-F-]*\([0-9Xxa-fA-F-][0-9Xxa-fA-F-]*\).*@@@end@@@.*\$$/\#define \1 \2/p"
+diff --git a/extra/locale/Makefile.in b/extra/locale/Makefile.in
+--- a/extra/locale/Makefile.in
++++ b/extra/locale/Makefile.in
+@@ -155,10 +155,10 @@ $(locale_OUT)/gen_wctype : $(locale_DIR)/gen_wctype.c
+ 
+ ifneq ($(V),)
+ ifeq ($(V),1)
+-FLAG-locale-verbose := -v
++FLAG-locale-verbose := -v -v
+ endif
+ ifeq ($(V),2)
+-FLAG-locale-verbose := -v -v
++FLAG-locale-verbose := -v
+ endif
+ endif
+ 
+diff --git a/ldso/ldso/Makefile.in b/ldso/ldso/Makefile.in
+--- a/ldso/ldso/Makefile.in
++++ b/ldso/ldso/Makefile.in
+@@ -68,6 +68,7 @@ LDFLAGS-$(UCLIBC_LDSO_NAME).so += -T $(ldso:.$(ABI_VERSION)=).lds
+ endif
+ 
+ $(ldso): $(ldso:.$(ABI_VERSION)=)
++$(ldso:.$(ABI_VERSION)=): | $(top_builddir)lib
+ $(ldso:.$(ABI_VERSION)=): $($(UCLIBC_LDSO_NAME)_OUT)/$(UCLIBC_LDSO_NAME)_so.a
+ ifeq ($(LDSO_PRELINK_SUPPORT),y)
+ 	$(call create-lds)
+diff --git a/libc/Makefile.in b/libc/Makefile.in
+--- a/libc/Makefile.in
++++ b/libc/Makefile.in
+@@ -87,8 +87,7 @@ $(libc_OUT)/libc.oS: $(libc-multi-y) | $(top_builddir)lib/libc.a $(top_builddir)
+ 	$(Q)$(RM) $@
+ 	$(compile-m)
+ 
+-$(top_builddir)lib/libc.a: $(libc-a-y) | $(crt-y)
+-	$(Q)$(INSTALL) -d $(dir $@)
++$(top_builddir)lib/libc.a: $(libc-a-y)
+ 	$(Q)$(RM) $@
+ 	$(do_ar)
+ 
+diff --git a/libc/sysdeps/linux/Makefile.commonarch b/libc/sysdeps/linux/Makefile.commonarch
+--- a/libc/sysdeps/linux/Makefile.commonarch
++++ b/libc/sysdeps/linux/Makefile.commonarch
+@@ -15,7 +15,6 @@ ARCH_SOBJ = $(patsubst %.s,%.o,$(patsubst %.S,%.o,$(addprefix $(ARCH_OUT)/,$(SSR
+ 
+ ARCH_OBJS = $(ARCH_COBJ) $(ARCH_SOBJ)
+ 
+-crt-y          := FORCE
+ libc-y         += $(ARCH_OBJS)
+ libc-nomulti-y += $(ARCH_SOBJ)
+ objclean-y     += CLEAN_$(subst $(top_builddir),,$(ARCH_OUT))
+diff --git a/libpthread/nptl/Makefile.in b/libpthread/nptl/Makefile.in
+--- a/libpthread/nptl/Makefile.in
++++ b/libpthread/nptl/Makefile.in
+@@ -92,19 +92,12 @@ $(top_builddir)lib/libpthread.a: $(libpthread-a-y)
+ 	$(Q)$(RM) $@
+ 	$(do_ar)
+ 
+-#
+-# Create 'pthread-errnos.h' header file.
+-#
+-CFLAGS-gen_pthread-errnos.c = -S
+-
+-$(libpthread_OUT)/gen_pthread-errnos.c: $(libpthread_DIR)/pthread-errnos.sym | $(libpthread_OUT)
+-	$(do_awk) $(top_srcdir)extra/scripts/gen-as-const.awk $< > $@
+-
+-$(libpthread_OUT)/gen_pthread-errnos.s: $(libpthread_OUT)/gen_pthread-errnos.c | headers
+-	$(compile.c)
+-libpthread-generated-y += $(libpthread_OUT)/gen_pthread-errnos.s
+-$(libpthread_OUT)/pthread-errnos.h: $(libpthread_OUT)/gen_pthread-errnos.s
+-	$(do_sed) $(PTHREAD_GENERATE_MANGLE) $< > $@
++$(libpthread_OUT)/pthread-errnos.h: $(top_srcdir)extra/scripts/gen-as-const.awk | headers
++$(libpthread_OUT)/pthread-errnos.h: $(libpthread_DIR)/pthread-errnos.sym
++	@$(disp_gen)
++	$(do_awk) $(top_srcdir)extra/scripts/gen-as-const.awk $< \
++	| $(CC) $(CFLAGS) -x c - -S -o - \
++	| $(SED) $(PTHREAD_GENERATE_MANGLE) > $@
+ 	@if test ! -s $@ ; then rm -f $@ ; false ; fi
+ 
+ pregen-headers-$(UCLIBC_HAS_THREADS_NATIVE) += $(libpthread_OUT)/pthread-errnos.h
+@@ -132,7 +125,6 @@ headers_clean-y += HEADERCLEAN_libpthread/nptl
+ 
+ HEADERCLEAN_libpthread/nptl:
+ 	$(do_rm) $(nptl_headers_bootstrap) \
+-	      $(addprefix $(libpthread_OUT)/gen_pthread-errnos., c s) \
+ 	      $(libpthread_OUT)/pthread-errnos.h
+ 
+ CLEAN_libpthread/nptl:
+diff --git a/libpthread/nptl/sysdeps/Makefile.commonarch b/libpthread/nptl/sysdeps/Makefile.commonarch
+--- a/libpthread/nptl/sysdeps/Makefile.commonarch
++++ b/libpthread/nptl/sysdeps/Makefile.commonarch
+@@ -40,16 +40,12 @@ librt_arch_COBJ = $(patsubst %.c,$(libpthread_arch_OUT)/%.o,$(librt_arch_CSRC))
+ librt_arch_SOBJ = $(patsubst %.S,$(libpthread_arch_OUT)/%.o,$(librt_arch_SSRC))
+ librt_arch_OBJS = $(librt_arch_COBJ) $(librt_arch_SOBJ)
+ 
+-CFLAGS-gen_tcb-offsets.c = -S
+-$(libpthread_arch_OUT)/gen_tcb-offsets.c: $(libpthread_arch_DIR)/tcb-offsets.sym | $(libpthread_arch_OUT)
+-	$(do_awk) $(top_srcdir)extra/scripts/gen-as-const.awk $< > $@
+-
+-$(libpthread_arch_OUT)/gen_tcb-offsets.s: $(libpthread_arch_OUT)/gen_tcb-offsets.c | headers
+-	$(compile.c)
+-libpthread-generated-y += $(libpthread_arch_OUT)/gen_tcb-offsets.s
+-PTHREAD_TCB_OFFSET_MANGLE ?= -n "s/^.*@@@name@@@\([^@]*\)@@@value@@@[^0-9Xxa-fA-F-]*\([0-9Xxa-fA-F-][0-9Xxa-fA-F-]*\).*@@@end@@@.*\$$/\#define \1 \2/p"
+-$(libpthread_arch_OUT)/tcb-offsets.h: $(libpthread_arch_OUT)/gen_tcb-offsets.s
+-	$(do_sed) $(PTHREAD_TCB_OFFSET_MANGLE) $< > $@
++$(libpthread_arch_OUT)/tcb-offsets.h: $(top_srcdir)extra/scripts/gen-as-const.awk | headers
++$(libpthread_arch_OUT)/tcb-offsets.h: $(libpthread_arch_DIR)/tcb-offsets.sym
++	@$(disp_gen)
++	$(do_awk) $(top_srcdir)extra/scripts/gen-as-const.awk $< \
++	| $(CC) $(CFLAGS) -x c - -S -o - \
++	| $(SED) $(PTHREAD_GENERATE_MANGLE) > $@
+ 	@if test ! -s $@ ; then rm -f $@ ; false ; fi
+ 
+ pregen-headers-$(UCLIBC_HAS_THREADS_NATIVE) += $(libpthread_arch_OUT)/tcb-offsets.h
+@@ -60,8 +56,7 @@ headers_clean-y+= HEADERCLEAN_$(subst $(top_builddir),,$(libpthread_arch_OUT))
+ CLEAN_$(subst $(top_builddir),,$(libpthread_arch_OUT)):
+ 	$(do_rm) $(addprefix $(libpthread_arch_OUT)/*., o os oS)
+ HEADERCLEAN_$(subst $(top_builddir),,$(libpthread_arch_OUT)):
+-	$(do_rm) $(libpthread_arch_OUT)/tcb-offsets.h \
+-		$(addprefix $(libpthread_arch_OUT)/gen_tcb-offsets., c h s)
++	$(do_rm) $(libpthread_arch_OUT)/tcb-offsets.h
+ ifneq ($(TARGET_SUBARCH),)
+ objclean-y     +=       CLEAN_$(subst $(top_builddir),,$(libpthread_subarch_OUT))
+ CLEAN_$(subst $(top_builddir),,$(libpthread_subarch_OUT)):
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/Makefile.commonarch b/libpthread/nptl/sysdeps/unix/sysv/linux/Makefile.commonarch
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/Makefile.commonarch
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/Makefile.commonarch
+@@ -163,31 +163,15 @@ ASFLAGS-read.S = -D_LIBC_REENTRANT
+ ASFLAGS-write.S = -D_LIBC_REENTRANT
+ ASFLAGS-waitpid.S = -D_LIBC_REENTRANT
+ 
+-#
+-# Create header files.
+-#
+-CFLAGS-gen_lowlevelbarrier.c = -S
+-CFLAGS-gen_lowlevelcond.c = -S
+-CFLAGS-gen_lowlevelrobustlock.c = -S
+-CFLAGS-gen_lowlevelrwlock.c = -S
+-CFLAGS-gen_pthread-pi-defines.c = -S
+-CFLAGS-gen_structsem.c = -S
+-CFLAGS-gen_unwindbuf.c = -S
+-
+-PTHREAD_GENERATE_MANGLE ?= -n "s/^.*@@@name@@@\([^@]*\)@@@value@@@[^0-9Xxa-fA-F-]*\([0-9Xxa-fA-F-][0-9Xxa-fA-F-]*\).*@@@end@@@.*\$$/\#define \1 \2/p"
+-
+ PTHREAD_LINUX_SYM   := $(notdir $(wildcard $(libpthread_linux_DIR)/*.sym))
+-PTHREAD_LINUX_SYM_C := $(addprefix $(libpthread_linux_OUT)/gen_,$(PTHREAD_LINUX_SYM:.sym=.c))
+-PTHREAD_LINUX_SYM_S := $(PTHREAD_LINUX_SYM_C:.c=.s)
+ PTHREAD_LINUX_SYM_H := $(addprefix $(libpthread_linux_OUT)/,$(PTHREAD_LINUX_SYM:.sym=.h))
+ 
+-$(PTHREAD_LINUX_SYM_C): $(libpthread_linux_OUT)/gen_%.c: $(libpthread_linux_DIR)/%.sym | $(libpthread_linux_OUT)
+-	$(do_awk) $(top_srcdir)extra/scripts/gen-as-const.awk $< > $@
+-$(PTHREAD_LINUX_SYM_S): $(libpthread_linux_OUT)/gen_%.s: $(libpthread_linux_OUT)/gen_%.c | headers
+-	$(compile.c)
+-libpthread-generated-y += $(PTHREAD_LINUX_SYM_S)
+-$(PTHREAD_LINUX_SYM_H): $(libpthread_linux_OUT)/%.h: $(libpthread_linux_OUT)/gen_%.s
+-	$(do_sed) $(PTHREAD_GENERATE_MANGLE) $< > $@
++$(PTHREAD_LINUX_SYM_H): $(top_srcdir)extra/scripts/gen-as-const.awk | headers
++$(PTHREAD_LINUX_SYM_H): $(libpthread_linux_OUT)/%.h: $(libpthread_linux_DIR)/%.sym
++	@$(disp_gen)
++	$(do_awk) $(top_srcdir)extra/scripts/gen-as-const.awk $< \
++	| $(CC) $(CFLAGS) -x c - -S -o - \
++	| $(SED) $(PTHREAD_GENERATE_MANGLE) > $@
+ 	@if test ! -s $@ ; then rm -f $@ ; false ; fi
+ 
+ pregen-headers-$(UCLIBC_HAS_THREADS_NATIVE) += $(PTHREAD_LINUX_SYM_H)
+@@ -199,8 +183,7 @@ $(ALL_HEADERS_BITS_PTHREAD): $(top_builddir)include/bits/%: | $(top_builddir)inc
+ 	$(do_ln) $(call rel_srcdir)$(libpthread_linux_DIR)/bits/$(@F) $@
+ 
+ HEADERCLEAN_libpthread/nptl/sysdeps/unix/sysv/linux:
+-	$(do_rm) $(PTHREAD_LINUX_SYM_C) $(PTHREAD_LINUX_SYM_S) \
+-		$(PTHREAD_LINUX_SYM_H)
++	$(do_rm) $(PTHREAD_LINUX_SYM_H)
+ 
+ CLEAN_libpthread/nptl/sysdeps/unix/sysv/linux:
+ 	$(do_rm) $(addprefix $(libpthread_linux_OUT)/*., o os oS)
+diff --git a/librt/Makefile.in b/librt/Makefile.in
+--- a/librt/Makefile.in
++++ b/librt/Makefile.in
+@@ -73,7 +73,7 @@ $(librt_OUT)/librt_so.a: $(librt-so-y)
+ 	$(Q)$(RM) $@
+ 	$(do_ar)
+ 
+-$(top_builddir)lib/librt.a: $(librt-a-y) | $(top_builddir)lib
++$(top_builddir)lib/librt.a: $(librt-a-y)
+ 	$(Q)$(RM) $@
+ 	$(do_ar)
+ 
+-- 
