@@ -152,17 +152,4 @@ diff --git a/test/misc/Makefile.in b/test/misc/Makefile.in
  endif
  CFLAGS_dirent64 := -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FILE_OFFSET_BITS=64
  
-diff --git a/test/unistd/Makefile.in b/test/unistd/Makefile.in
---- a/test/unistd/Makefile.in
-+++ b/test/unistd/Makefile.in
-@@ -5,6 +5,9 @@ ifeq ($(UCLIBC_HAS_LFS),)
- ifeq ($(UCLIBC_HAS_LFS),)
- TESTS_DISABLED := tst-preadwrite64
- endif
-+ifeq ($(UCLIBC_HAS_ADVANCED_REALTIME),)
-+TESTS_DISABLED += tst-posix_fallocate
-+endif
- OPTS_getopt      := -abcXXX -9
- OPTS_getopt_long := --add XXX --delete YYY --verbose
- 
 -- 
