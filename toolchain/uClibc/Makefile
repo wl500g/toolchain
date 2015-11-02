@@ -9,22 +9,21 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=uClibc
 PKG_VERSION:=$(call qstrip,$(CONFIG_UCLIBC_VERSION))
-PKG_EXTRAVERSION:=$(call qstrip,$(CONFIG_UCLIBC_EXTRA_VERSION))
 PKG_VERSION_SNAPSHOT:=$(call qstrip,$(CONFIG_UCLIBC_VERSION_SNAPSHOT))
 ifeq ($(PKG_VERSION_SNAPSHOT),y)
 PKG_SOURCE_URL:=http://www.uclibc.org/downloads/snapshots
 else
 PKG_SOURCE_URL:=http://www.uclibc.org/downloads
 endif
-PATCH_DIR:=./patches/$(PKG_VERSION)$(PKG_EXTRAVERSION)
-CONFIG_DIR:=./config/$(PKG_VERSION)$(PKG_EXTRAVERSION)
+PATCH_DIR:=./patches/$(PKG_VERSION)
+CONFIG_DIR:=./config/$(PKG_VERSION)
 
-PKG_SOURCE:=uClibc-$(PKG_VERSION)$(PKG_EXTRAVERSION).tar.bz2
+PKG_SOURCE:=uClibc-$(PKG_VERSION).tar.bz2
 PKG_CAT:=bzcat
 
 STAGING_DIR_HOST:=$(TOOLCHAIN_DIR)
 BUILD_DIR_HOST:=$(BUILD_DIR_TOOLCHAIN)
-PKG_BUILD_DIR:=$(BUILD_DIR_HOST)/uClibc-$(PKG_VERSION)$(PKG_EXTRAVERSION)
+PKG_BUILD_DIR:=$(BUILD_DIR_HOST)/uClibc-$(PKG_VERSION)
 
 include $(INCLUDE_DIR)/host-build.mk
 
@@ -60,7 +59,7 @@ define Build/Prepare/Snapshot
 endef
 
 define Build/Prepare
-	@echo prepare uClibc version $(PKG_VERSION)$(PKG_EXTRAVERSION)  
+	@echo prepare uClibc version $(PKG_VERSION)
 ifeq ($(PKG_VERSION_SNAPSHOT),y)
 	$(call Build/Prepare/Snapshot)
 else
@@ -114,7 +113,6 @@ define Build/Compile
 	$(UCLIBC_MAKE) PREFIX= all
 	$(UCLIBC_MAKE) PREFIX=$(STAGING_DIR_HOST)/ install_runtime install_dev
 	$(SED) 's,UCLIBC_VERSION=.*,UCLIBC_VERSION=$(PKG_VERSION),' $(TOOLCHAIN_DIR)/info.mk
-	$(SED) 's,UCLIBC_PATCHVER=.*,UCLIBC_PATCHVER=$(PKG_EXTRAVERSION),' $(TOOLCHAIN_DIR)/info.mk
 endef
 
 define Build/Install
