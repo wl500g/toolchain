@@ -1,36 +1,11 @@
-From 293173f87072bbc0cafc457d5d8a6039f4d1d259
-From: Peter S. Mazinger
-Date: Sun, 20 Mar 2011 01:21:38 +0000
-Subject: pthreadP.h: avoid shadow warnings
+libpthread: nptl: Upstream warnings removal
 
-Change CANCELLATION_P macro and adapt usage.
+ 293173f8 pthreadP.h: avoid shadow warnings
+ 77937735 nptl: fix compiler warning due to missing prototype
+ 2d9740a6 nptl: fix __lll_lock_wait_private multiple definition
+ e63f98ff nptl: fix gcc noreturn warning
+ dd0bd6be nptl: fix gcc noreturn warning
 
-Signed-off-by: Peter S. Mazinger <ps.m@gmx.net>
-Signed-off-by: Bernhard Reutner-Fischer <rep.dot.nop@gmail.com>
-
----
-From 77937735ab0b3cc45c02cce1a4e4b57acbb344cc
-From: Carmelo Amoroso
-Date: Wed, 14 Mar 2012 15:26:13 +0000
-Subject: nptl: fix compiler warning due to missing prototype
-
-libpthread/nptl/sysdeps/pthread/pt-longjmp.c: In function 'longjmp':
-libpthread/nptl/sysdeps/pthread/pt-longjmp.c:27:3: warning: implicit declaration of function '__libc_longjmp' [-Wimplicit-function-declaration]
-libpthread/nptl/sysdeps/pthread/pt-longjmp.c:28:1: warning: 'noreturn' function does return [enabled by default]
-
-Signed-off-by: Carmelo Amoroso <carmelo.amoroso@st.com>
-
----
-From 2d9740a65a81fe050f99479c2a2f38b6a3198a8e
-From: Tony Wu
-Date: Fri, 25 Jul 2014 05:52:11 +0000
-Subject: uclibc: nptl: fix __lll_lock_wait_private multiple definition
-
-Mark non-pthread __lll_lock_wait_private weak to avoid multiple
-definition error in static link mode.
-
-Signed-off-by: Tony Wu <tung7970@gmail.com>
-Signed-off-by: Bernhard Reutner-Fischer <rep.dot.nop@gmail.com>
 ---
 
 diff --git a/libc/unistd/sleep.c b/libc/unistd/sleep.c
@@ -80,18 +55,6 @@ diff --git a/libpthread/nptl/pthreadP.h b/libpthread/nptl/pthreadP.h
      if (CANCEL_ENABLED_AND_CANCELED (cancelhandling))			      \
        {									      \
  	THREAD_SETMEM (self, result, PTHREAD_CANCELED);			      \
-diff --git a/libpthread/nptl/pthread_create.c b/libpthread/nptl/pthread_create.c
---- a/libpthread/nptl/pthread_create.c
-+++ b/libpthread/nptl/pthread_create.c
-@@ -221,7 +221,7 @@ __free_tcb (struct pthread *pd)
- }
- 
- 
--static int
-+static int attribute_noreturn
- start_thread (void *arg)
- {
-   struct pthread *pd = (struct pthread *) arg;
 diff --git a/libpthread/nptl/pthread_exit.c b/libpthread/nptl/pthread_exit.c
 --- a/libpthread/nptl/pthread_exit.c
 +++ b/libpthread/nptl/pthread_exit.c
@@ -176,18 +139,6 @@ diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/lowlevellock.c b/libpthread
  __lll_lock_wait_private (int *futex)
  {
    if (*futex == 2)
-diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/mq_notify.c b/libpthread/nptl/sysdeps/unix/sysv/linux/mq_notify.c
---- a/libpthread/nptl/sysdeps/unix/sysv/linux/mq_notify.c
-+++ b/libpthread/nptl/sysdeps/unix/sysv/linux/mq_notify.c
-@@ -111,7 +111,7 @@ notification_function (void *arg)
- 
- 
- /* Helper thread.  */
--static void *
-+static attribute_noreturn void *
- helper_thread (void *arg)
- {
-   while (1)
 diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/timer_routines.c b/libpthread/nptl/sysdeps/unix/sysv/linux/timer_routines.c
 --- a/libpthread/nptl/sysdeps/unix/sysv/linux/timer_routines.c
 +++ b/libpthread/nptl/sysdeps/unix/sysv/linux/timer_routines.c
