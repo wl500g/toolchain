@@ -1,0 +1,43 @@
+librt: Upstream fixes
+
+ 04cd09eb3a librt: Fix librt.so depends for !NPTL
+ a8cf23486e librt: honour HAS_STUBS in buildsys
+ 03cc2041fc librt: Add missing __dso_handle
+
+---
+
+diff --git a/librt/Makefile.in b/librt/Makefile.in
+--- a/librt/Makefile.in
++++ b/librt/Makefile.in
+@@ -33,6 +33,9 @@ else
+ librt_filter_SRC += clock_nanosleep.c clock_getcpuclockid.c clock_gettime.c
+ librt_SSRC :=
+ endif
++librt_filter_SRC += $(if $(UCLIBC_HAS_STUBS),,rt_stubs.c)
++librt_filter_SRC += $(if $(HAS_NO_THREADS),dso_handle.c)
++
+ librt_SRC := $(filter-out $(librt_filter_SRC),$(librt_SRC))
+ 
+ librt_OBJ := $(patsubst %.c,$(librt_OUT)/%.o,$(librt_SRC))
+@@ -52,8 +55,8 @@ lib-a-y += $(top_builddir)lib/librt.a
+ lib-so-y += $(top_builddir)lib/librt.so
+ endif
+ 
+-
+-ifeq ($(DOPIC)$(UCLIBC_HAS_THREADS_NATIVE),yn)
++# for NPTL we need SHARED regardless of DOPIC
++ifeq ($(if $(UCLIBC_HAS_THREADS_NATIVE),,$(DOPIC)),y)
+ $(top_builddir)lib/librt.so: $(top_builddir)lib/librt.a $(libc.depend)
+ else
+ $(top_builddir)lib/librt.so: $(librt_OUT)/librt_so.a $(libc.depend) $(libpthread.depend) $(libdl.depend)
+diff --git a/librt/dso_handle.c b/librt/dso_handle.c
+new file mode 100644
+--- /dev/null
++++ b/librt/dso_handle.c
+@@ -0,0 +1,5 @@
++/* Copyright (C) 2015 Bernhard Reutner-Fischer
++ * Licensed under the LGPL v2.1 or later, see the file COPYING.LIB in this tarball.
++ */
++
++const void *const __dso_handle attribute_hidden = &__dso_handle;
+-- 
