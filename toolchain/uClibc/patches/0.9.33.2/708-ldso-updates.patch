@@ -1,9 +1,11 @@
 ldso: Upstream updates
 
- f9946285ce libdl.c,dl-string.h: do not use inlined _dl_memset and others in libdl
- 100ad375a3 dl-elf.h: remove unused prototype
- 1130df6d42 dl-hash.h: remove unused _dl_symbol and unneeded prototypes
- b57e9640db ldso/libdl: Also include dl-tls.h for for !SHARED.
+ f9946285 libdl.c,dl-string.h: do not use inlined _dl_memset and others in libdl
+ 100ad375 dl-elf.h: remove unused prototype
+ 1130df6d dl-hash.h: remove unused _dl_symbol and unneeded prototypes
+ b57e9640 ldso/libdl: Also include dl-tls.h for for !SHARED.
+ ea269ccb ldso: silence warnings in debug code
+ 54979ed7 libdl: fix unused variable warning
 
 ---
 diff --git a/ldso/include/dl-elf.h b/ldso/include/dl-elf.h
@@ -138,6 +140,16 @@ diff --git a/ldso/libdl/libdl.c b/ldso/libdl/libdl.c
  extern struct link_map *_dl_update_slotinfo(unsigned long int req_modid);
  # endif
  
+@@ -308,7 +308,9 @@ static void *do_dlopen(const char *libname, int flag, ElfW(Addr) from)
+ 	struct elf_resolve **init_fini_list;
+ 	static bool _dl_init;
+ 	struct elf_resolve **local_scope;
++#ifdef SHARED
+ 	struct r_scope_elem *ls;
++#endif
+ #if defined(USE_TLS) && USE_TLS
+ 	bool any_tls = false;
+ #endif
 @@ -393,7 +393,7 @@ static void *do_dlopen(const char *libname, int flag)
  		return NULL;
  	}
@@ -156,4 +168,29 @@ diff --git a/ldso/libdl/libdl.c b/ldso/libdl/libdl.c
  				dyn_ptr = dyn_ptr->next;
  				dyn_ptr->dyn = tpnt1;
  				/* Used to record RTLD_LOCAL scope */
+diff --git a/ldso/ldso/dl-elf.c b/ldso/ldso/dl-elf.c
+--- a/ldso/ldso/dl-elf.c
++++ b/ldso/ldso/dl-elf.c
+@@ -794,7 +794,7 @@ struct elf_resolve *_dl_load_elf_shared_library(unsigned rflags,
+ #endif
+ 		{
+ # ifdef __SUPPORT_LD_DEBUG_EARLY__
+-			unsigned int tmp = (unsigned int) tpnt->l_tls_initimage;
++			char *tmp = (char *) tpnt->l_tls_initimage;
+ 			tpnt->l_tls_initimage = (char *) tlsppnt->p_vaddr + tpnt->loadaddr;
+ 			_dl_debug_early("Relocated TLS initial image from %x to %x (size = %x)\n", tmp, tpnt->l_tls_initimage, tpnt->l_tls_initimage_size);
+ 			tmp = 0;
+diff --git a/ldso/ldso/ldso.c b/ldso/ldso/ldso.c
+--- a/ldso/ldso/ldso.c
++++ b/ldso/ldso/ldso.c
+@@ -751,7 +751,8 @@ of this helper program; chances are you did not intend to run this program.\n\
+ 	 * case the executable is actually an ET_DYN object.
+ 	 */
+ 	if (app_tpnt->l_tls_initimage != NULL) {
+-		unsigned int tmp = (unsigned int) app_tpnt->l_tls_initimage;
++		char *tmp attribute_unused =
++			(char *) app_tpnt->l_tls_initimage;
+ 		app_tpnt->l_tls_initimage =
+ 			(char *) app_tpnt->l_tls_initimage + app_tpnt->loadaddr;
+ 		_dl_debug_early("Relocated TLS initial image from %x to %x (size = %x)\n",
 -- 
