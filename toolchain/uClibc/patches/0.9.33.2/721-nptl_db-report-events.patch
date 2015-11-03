@@ -1,0 +1,586 @@
+From 62175247d977c087e62f067d4db1445f88b61e7b
+From: Roland McGrath <roland@gnu.org>
+Date: Tue, 28 Apr 2015 03:07:24 +0000
+Subject: init.c (__nptl_initial_report_events): New variable.
+
+	(__pthread_initialize_minimal_internal): Initialize pd->report_events
+	to that.
+
+This patch helps NPTL report TD_CREATE event, so that GDB could catch the
+event and update its thread_list.
+Link: http://lists.uclibc.org/pipermail/uclibc/2015-April/048921.html
+[shengyong:
+ - original patch from glibc: commit 7d9d8bd18906fdd17364f372b160d7ab896ce909
+ - context adjust
+ - update nptl_db/ChangeLog]
+
+Signed-off-by: Roland McGrath <roland@gnu.org>
+Signed-off-by: Sheng Yong <shengyong1@huawei.com>
+Signed-off-by: Bernhard Reutner-Fischer <rep.dot.nop@gmail.com>
+---
+
+diff --git a/libpthread/nptl_db/ChangeLog b/libpthread/nptl_db/ChangeLog
+--- a/libpthread/nptl_db/ChangeLog
++++ b/libpthread/nptl_db/ChangeLog
+@@ -1,3 +1,26 @@
++2007-05-16  Roland McGrath  <roland@redhat.com>
++
++	* td_thr_get_info.c: Fake the results for TH->th_unique == 0.
++	* td_thr_validate.c: Likewise.
++	* td_thr_setgregs.c: Likewise.
++	* td_thr_setfpregs.c: Likewise.
++	* td_thr_getgregs.c: Likewise.
++	* td_thr_getfpregs.c: Likewise.
++	* td_thr_tlsbase.c: Likewise.
++
++	* structs.def: Add DB_VARIABLE (__nptl_initial_report_events).
++	* db_info.c: Add necessary declaration.
++	* td_thr_event_enable.c: Set __nptl_initial_report_events too.
++
++	* td_ta_thr_iter.c (iterate_thread_list): Make FAKE_EMPTY bool.
++	Use th_unique=0 in fake descriptor before initialization.
++
++	* td_ta_map_lwp2thr.c (__td_ta_lookup_th_unique): New function, broken
++	out of ...
++	(td_ta_map_lwp2thr): ... here, call it.  But don't before __stack_user
++	is initialized, then fake a handle with th_unique=0.
++	* thread_dbP.h: Declare it.
++
+ 2006-10-26  Pete Eberlein  <eberlein@us.ibm.com>
+ 
+ 	* nptl_db/db_info.c [TLS_DTV_AT_TP]: Fixed size init for dtvp
+diff --git a/libpthread/nptl_db/db_info.c b/libpthread/nptl_db/db_info.c
+--- a/libpthread/nptl_db/db_info.c
++++ b/libpthread/nptl_db/db_info.c
+@@ -1,7 +1,7 @@
+ /* This file is included by pthread_create.c to define in libpthread
+    all the magic symbols required by libthread_db.
+ 
+-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
++   Copyright (C) 2003, 2004, 2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+ 
+    The GNU C Library is free software; you can redistribute it and/or
+@@ -37,6 +37,8 @@ typedef struct
+ 
+ typedef struct link_map link_map;
+ 
++/* Actually static in nptl/init.c, but we only need it for typeof.  */
++extern bool __nptl_initial_report_events;
+ 
+ #define schedparam_sched_priority schedparam.sched_priority
+ 
+diff --git a/libpthread/nptl_db/structs.def b/libpthread/nptl_db/structs.def
+--- a/libpthread/nptl_db/structs.def
++++ b/libpthread/nptl_db/structs.def
+@@ -1,5 +1,5 @@
+ /* List of types and symbols in libpthread examined by libthread_db.
+-   Copyright (C) 2003, 2006 Free Software Foundation, Inc.
++   Copyright (C) 2003, 2006, 2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+ 
+    The GNU C Library is free software; you can redistribute it and/or
+@@ -55,6 +55,7 @@ DB_FUNCTION (__nptl_death_event)
+ DB_SYMBOL (__nptl_threads_events)
+ DB_VARIABLE (__nptl_nthreads)
+ DB_VARIABLE (__nptl_last_event)
++DB_VARIABLE (__nptl_initial_report_events)
+ 
+ DB_ARRAY_VARIABLE (__pthread_keys)
+ DB_STRUCT (pthread_key_struct)
+diff --git a/libpthread/nptl_db/td_ta_map_lwp2thr.c b/libpthread/nptl_db/td_ta_map_lwp2thr.c
+--- a/libpthread/nptl_db/td_ta_map_lwp2thr.c
++++ b/libpthread/nptl_db/td_ta_map_lwp2thr.c
+@@ -1,5 +1,5 @@
+ /* Which thread is running on an LWP?
+-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
++   Copyright (C) 2003, 2004, 2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+ 
+    The GNU C Library is free software; you can redistribute it and/or
+@@ -23,8 +23,8 @@
+ 
+ 
+ td_err_e
+-td_ta_map_lwp2thr (const td_thragent_t *ta_arg,
+-		   lwpid_t lwpid, td_thrhandle_t *th)
++__td_ta_lookup_th_unique (const td_thragent_t *ta_arg,
++			  lwpid_t lwpid, td_thrhandle_t *th)
+ {
+   td_thragent_t *const ta = (td_thragent_t *) ta_arg;
+   ps_err_e err;
+@@ -117,9 +117,6 @@ td_ta_map_lwp2thr (const td_thragent_t *ta_arg,
+ 
+   switch (ta->ta_howto)
+     {
+-    case ta_howto_unknown:
+-      return TD_DBERR;
+-
+     default:
+       return TD_DBERR;
+ 
+@@ -131,6 +128,7 @@ td_ta_map_lwp2thr (const td_thragent_t *ta_arg,
+ 				    0, regs, &addr);
+       if (terr != TD_OK)
+ 	return terr;
++
+       /* In this descriptor the nelem word is overloaded as the bias.  */
+       addr += (int32_t) DB_DESC_NELEM (ta->ta_howto_data.reg);
+       th->th_unique = addr;
+@@ -142,22 +140,22 @@ td_ta_map_lwp2thr (const td_thragent_t *ta_arg,
+       if (&ps_get_thread_area == NULL)
+ 	return TD_NOCAPAB;
+ 
+-       /* A la x86-64, there is a constant magic index for get_thread_area.  */
+-       if (ps_get_thread_area (ta->ph, lwpid,
+-			       ta->ta_howto_data.const_thread_area,
+-			       &th->th_unique) != PS_OK)
+-	 return TD_ERR;	/* XXX Other error value?  */
+-       break;
++      /* A la x86-64, there is a magic index for get_thread_area.  */
++      if (ps_get_thread_area (ta->ph, lwpid,
++			      ta->ta_howto_data.const_thread_area,
++			      &th->th_unique) != PS_OK)
++	return TD_ERR;	/* XXX Other error value?  */
++      break;
+ 
+-     case ta_howto_reg_thread_area:
++    case ta_howto_reg_thread_area:
+       if (&ps_get_thread_area == NULL)
+ 	return TD_NOCAPAB;
+ 
+-       /* A la i386, there is a register with an index for get_thread_area.  */
+-       if (ps_lgetregs (ta->ph, lwpid, regs) != PS_OK)
+-	 return TD_ERR;
+-       terr = _td_fetch_value_local (ta, ta->ta_howto_data.reg_thread_area, -1,
+-				     0, regs, &addr);
++      /* A la i386, a register holds the index for get_thread_area.  */
++      if (ps_lgetregs (ta->ph, lwpid, regs) != PS_OK)
++	return TD_ERR;
++      terr = _td_fetch_value_local (ta, ta->ta_howto_data.reg_thread_area,
++				    -1, 0, regs, &addr);
+       if (terr != TD_OK)
+ 	return terr;
+       /* In this descriptor the nelem word is overloaded as scale factor.  */
+@@ -171,7 +169,40 @@ td_ta_map_lwp2thr (const td_thragent_t *ta_arg,
+     }
+ 
+   /* Found it.  Now complete the `td_thrhandle_t' object.  */
+-  th->th_ta_p = (td_thragent_t *) ta;
++  th->th_ta_p = ta;
+ 
+   return TD_OK;
+ }
++
++td_err_e
++td_ta_map_lwp2thr (const td_thragent_t *ta_arg,
++		   lwpid_t lwpid, td_thrhandle_t *th)
++{
++  td_thragent_t *const ta = (td_thragent_t *) ta_arg;
++
++  /* We cannot rely on thread registers and such information at all
++     before __pthread_initialize_minimal has gotten far enough.  They
++     sometimes contain garbage that would confuse us, left by the kernel
++     at exec.  So if it looks like initialization is incomplete, we only
++     fake a special descriptor for the initial thread.  */
++
++  psaddr_t list;
++  td_err_e err = DB_GET_SYMBOL (list, ta, __stack_user);
++  if (err != TD_OK)
++    return err;
++
++  err = DB_GET_FIELD (list, ta, list, list_t, next, 0);
++  if (err != TD_OK)
++    return err;
++
++  if (list == 0)
++    {
++      if (ps_getpid (ta->ph) != lwpid)
++	return TD_ERR;
++      th->th_ta_p = ta;
++      th->th_unique = 0;
++      return TD_OK;
++    }
++
++  return __td_ta_lookup_th_unique (ta_arg, lwpid, th);
++}
+diff --git a/libpthread/nptl_db/td_ta_thr_iter.c b/libpthread/nptl_db/td_ta_thr_iter.c
+--- a/libpthread/nptl_db/td_ta_thr_iter.c
++++ b/libpthread/nptl_db/td_ta_thr_iter.c
+@@ -1,5 +1,6 @@
+ /* Iterate over a process's threads.
+-   Copyright (C) 1999,2000,2001,2002,2003,2004 Free Software Foundation, Inc.
++   Copyright (C) 1999,2000,2001,2002,2003,2004,2007
++	Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+    Contributed by Ulrich Drepper <drepper@redhat.com>, 1999.
+ 
+@@ -23,7 +24,7 @@
+ static td_err_e
+ iterate_thread_list (td_thragent_t *ta, td_thr_iter_f *callback,
+ 		     void *cbdata_p, td_thr_state_e state, int ti_pri,
+-		     psaddr_t head, int fake_empty)
++		     psaddr_t head, bool fake_empty)
+ {
+   td_err_e err;
+   psaddr_t next, ofs;
+@@ -40,13 +41,13 @@ iterate_thread_list (td_thragent_t *ta, td_thr_iter_f *callback,
+ 
+   if (next == 0 && fake_empty)
+     {
+-      /* __pthread_initialize_minimal has not run.
+-	 There is just the main thread to return.  */
+-      td_thrhandle_t th;
+-      err = td_ta_map_lwp2thr (ta, ps_getpid (ta->ph), &th);
+-      if (err == TD_OK)
+-	err = callback (&th, cbdata_p) != 0 ? TD_DBERR : TD_OK;
+-      return err;
++      /* __pthread_initialize_minimal has not run.  There is just the main
++	 thread to return.  We cannot rely on its thread register.  They
++	 sometimes contain garbage that would confuse us, left by the
++	 kernel at exec.  So if it looks like initialization is incomplete,
++	 we only fake a special descriptor for the initial thread.  */
++      td_thrhandle_t th = { ta, 0 };
++      return callback (&th, cbdata_p) != 0 ? TD_DBERR : TD_OK;
+     }
+ 
+   /* Cache the offset from struct pthread to its list_t member.  */
+@@ -135,13 +136,15 @@ td_ta_thr_iter (const td_thragent_t *ta_arg, td_thr_iter_f *callback,
+ 
+   err = DB_GET_SYMBOL (list, ta, __stack_user);
+   if (err == TD_OK)
+-    err = iterate_thread_list (ta, callback, cbdata_p, state, ti_pri, list, 1);
++    err = iterate_thread_list (ta, callback, cbdata_p, state, ti_pri,
++			       list, true);
+ 
+   /* And the threads with stacks allocated by the implementation.  */
+   if (err == TD_OK)
+     err = DB_GET_SYMBOL (list, ta, stack_used);
+   if (err == TD_OK)
+-    err = iterate_thread_list (ta, callback, cbdata_p, state, ti_pri, list, 0);
++    err = iterate_thread_list (ta, callback, cbdata_p, state, ti_pri,
++			       list, false);
+ 
+   return err;
+ }
+diff --git a/libpthread/nptl_db/td_thr_event_enable.c b/libpthread/nptl_db/td_thr_event_enable.c
+--- a/libpthread/nptl_db/td_thr_event_enable.c
++++ b/libpthread/nptl_db/td_thr_event_enable.c
+@@ -1,5 +1,5 @@
+ /* Enable event process-wide.
+-   Copyright (C) 1999, 2001, 2002, 2003 Free Software Foundation, Inc.
++   Copyright (C) 1999, 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+    Contributed by Ulrich Drepper <drepper@redhat.com>, 1999.
+ 
+@@ -25,7 +25,25 @@ td_thr_event_enable (const td_thrhandle_t *th, int onoff)
+ {
+   LOG ("td_thr_event_enable");
+ 
+-  /* Write the new value into the thread data structure.  */
+-  return DB_PUT_FIELD (th->th_ta_p, th->th_unique, pthread, report_events, 0,
++  if (th->th_unique != 0)
++    {
++      /* Write the new value into the thread data structure.  */
++      td_err_e err = DB_PUT_FIELD (th->th_ta_p, th->th_unique, pthread,
++				   report_events, 0,
++				   (psaddr_t) 0 + (onoff != 0));
++      if (err != TD_OK)
++	return err;
++
++      /* Just in case we are in the window between initializing __stack_user
++	 and copying from __nptl_initial_report_events, we set it too.
++	 It doesn't hurt to do this for non-initial threads, since it
++	 won't be consulted again anyway.  It would take another fetch
++	 to get the tid and determine this isn't the initial thread,
++	 so just do it always.  */
++    }
++
++  /* We are faking it for the initial thread before its thread
++     descriptor is set up.  */
++  return DB_PUT_VALUE (th->th_ta_p, __nptl_initial_report_events, 0,
+ 		       (psaddr_t) 0 + (onoff != 0));
+ }
+diff --git a/libpthread/nptl_db/td_thr_get_info.c b/libpthread/nptl_db/td_thr_get_info.c
+--- a/libpthread/nptl_db/td_thr_get_info.c
++++ b/libpthread/nptl_db/td_thr_get_info.c
+@@ -1,5 +1,5 @@
+ /* Get thread information.
+-   Copyright (C) 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
++   Copyright (C) 1999,2000,2001,2002,2003,2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+    Contributed by Ulrich Drepper <drepper@redhat.com>, 1999.
+ 
+@@ -31,35 +31,49 @@ td_thr_get_info (const td_thrhandle_t *th, td_thrinfo_t *infop)
+ 
+   LOG ("td_thr_get_info");
+ 
+-  /* Copy the whole descriptor in once so we can access the several
+-     fields locally.  Excess copying in one go is much better than
+-     multiple ps_pdread calls.  */
+-  err = DB_GET_STRUCT (copy, th->th_ta_p, th->th_unique, pthread);
+-  if (err != TD_OK)
+-    return err;
+-
+-  err = DB_GET_FIELD_ADDRESS (tls, th->th_ta_p, th->th_unique,
+-			      pthread, specific, 0);
+-  if (err != TD_OK)
+-    return err;
+-
+-  err = DB_GET_FIELD_LOCAL (schedpolicy, th->th_ta_p, copy, pthread,
+-			    schedpolicy, 0);
+-  if (err != TD_OK)
+-    return err;
+-  err = DB_GET_FIELD_LOCAL (schedprio, th->th_ta_p, copy, pthread,
+-			    schedparam_sched_priority, 0);
+-  if (err != TD_OK)
+-    return err;
+-  err = DB_GET_FIELD_LOCAL (tid, th->th_ta_p, copy, pthread, tid, 0);
+-  if (err != TD_OK)
+-    return err;
+-  err = DB_GET_FIELD_LOCAL (cancelhandling, th->th_ta_p, copy, pthread,
+-			    cancelhandling, 0);
+-  if (err != TD_OK)
+-    return err;
+-  err = DB_GET_FIELD_LOCAL (report_events, th->th_ta_p, copy, pthread,
+-			    report_events, 0);
++  if (th->th_unique == 0)
++    {
++      /* Special case for the main thread before initialization.  */
++      copy = NULL;
++      tls = 0;
++      cancelhandling = 0;
++      schedprio = 0;
++      tid = 0;
++      err = DB_GET_VALUE (report_events, th->th_ta_p,
++			  __nptl_initial_report_events, 0);
++    }
++  else
++    {
++      /* Copy the whole descriptor in once so we can access the several
++	 fields locally.  Excess copying in one go is much better than
++	 multiple ps_pdread calls.  */
++      err = DB_GET_STRUCT (copy, th->th_ta_p, th->th_unique, pthread);
++      if (err != TD_OK)
++	return err;
++
++      err = DB_GET_FIELD_ADDRESS (tls, th->th_ta_p, th->th_unique,
++				  pthread, specific, 0);
++      if (err != TD_OK)
++	return err;
++
++      err = DB_GET_FIELD_LOCAL (schedpolicy, th->th_ta_p, copy, pthread,
++				schedpolicy, 0);
++      if (err != TD_OK)
++	return err;
++      err = DB_GET_FIELD_LOCAL (schedprio, th->th_ta_p, copy, pthread,
++				schedparam_sched_priority, 0);
++      if (err != TD_OK)
++	return err;
++      err = DB_GET_FIELD_LOCAL (tid, th->th_ta_p, copy, pthread, tid, 0);
++      if (err != TD_OK)
++	return err;
++      err = DB_GET_FIELD_LOCAL (cancelhandling, th->th_ta_p, copy, pthread,
++				cancelhandling, 0);
++      if (err != TD_OK)
++	return err;
++      err = DB_GET_FIELD_LOCAL (report_events, th->th_ta_p, copy, pthread,
++				report_events, 0);
++    }
+   if (err != TD_OK)
+     return err;
+ 
+@@ -86,9 +100,10 @@ td_thr_get_info (const td_thrhandle_t *th, td_thrinfo_t *infop)
+   infop->ti_lid = tid == 0 ? ps_getpid (th->th_ta_p->ph) : (uintptr_t) tid;
+   infop->ti_traceme = report_events != 0;
+ 
+-  err = DB_GET_FIELD_LOCAL (infop->ti_startfunc, th->th_ta_p, copy, pthread,
+-			    start_routine, 0);
+-  if (err == TD_OK)
++  if (copy != NULL)
++    err = DB_GET_FIELD_LOCAL (infop->ti_startfunc, th->th_ta_p, copy, pthread,
++			      start_routine, 0);
++  if (copy != NULL && err == TD_OK)
+     {
+       uint32_t idx;
+       for (idx = 0; idx < TD_EVENTSIZE; ++idx)
+diff --git a/libpthread/nptl_db/td_thr_getfpregs.c b/libpthread/nptl_db/td_thr_getfpregs.c
+--- a/libpthread/nptl_db/td_thr_getfpregs.c
++++ b/libpthread/nptl_db/td_thr_getfpregs.c
+@@ -1,5 +1,5 @@
+ /* Get a thread's floating-point register set.
+-   Copyright (C) 1999, 2001, 2002, 2003 Free Software Foundation, Inc.
++   Copyright (C) 1999, 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+    Contributed by Ulrich Drepper <drepper@redhat.com>, 1999.
+ 
+@@ -28,6 +28,11 @@ td_thr_getfpregs (const td_thrhandle_t *th, prfpregset_t *regset)
+ 
+   LOG ("td_thr_getfpregs");
+ 
++  if (th->th_unique == 0)
++    /* Special case for the main thread before initialization.  */
++    return ps_lgetfpregs (th->th_ta_p->ph, ps_getpid (th->th_ta_p->ph),
++			  regset) != PS_OK ? TD_ERR : TD_OK;
++
+   /* We have to get the state and the PID for this thread.  */
+   err = DB_GET_FIELD (cancelhandling, th->th_ta_p, th->th_unique, pthread,
+ 		      cancelhandling, 0);
+diff --git a/libpthread/nptl_db/td_thr_getgregs.c b/libpthread/nptl_db/td_thr_getgregs.c
+--- a/libpthread/nptl_db/td_thr_getgregs.c
++++ b/libpthread/nptl_db/td_thr_getgregs.c
+@@ -1,5 +1,5 @@
+ /* Get a thread's general register set.
+-   Copyright (C) 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
++   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+    Contributed by Ulrich Drepper <drepper@redhat.com>, 1999.
+ 
+@@ -28,6 +28,11 @@ td_thr_getgregs (const td_thrhandle_t *th, prgregset_t regset)
+ 
+   LOG ("td_thr_getgregs");
+ 
++  if (th->th_unique == 0)
++    /* Special case for the main thread before initialization.  */
++    return ps_lgetregs (th->th_ta_p->ph, ps_getpid (th->th_ta_p->ph),
++			regset) != PS_OK ? TD_ERR : TD_OK;
++
+   /* We have to get the state and the PID for this thread.  */
+   err = DB_GET_FIELD (cancelhandling, th->th_ta_p, th->th_unique, pthread,
+ 		      cancelhandling, 0);
+diff --git a/libpthread/nptl_db/td_thr_setfpregs.c b/libpthread/nptl_db/td_thr_setfpregs.c
+--- a/libpthread/nptl_db/td_thr_setfpregs.c
++++ b/libpthread/nptl_db/td_thr_setfpregs.c
+@@ -1,5 +1,5 @@
+ /* Set a thread's floating-point register set.
+-   Copyright (C) 1999, 2001, 2002, 2003 Free Software Foundation, Inc.
++   Copyright (C) 1999, 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+    Contributed by Ulrich Drepper <drepper@redhat.com>, 1999.
+ 
+@@ -28,6 +28,11 @@ td_thr_setfpregs (const td_thrhandle_t *th, const prfpregset_t *fpregs)
+ 
+   LOG ("td_thr_setfpregs");
+ 
++  if (th->th_unique == 0)
++    /* Special case for the main thread before initialization.  */
++    return ps_lsetfpregs (th->th_ta_p->ph, ps_getpid (th->th_ta_p->ph),
++			  fpregs) != PS_OK ? TD_ERR : TD_OK;
++
+   /* We have to get the state and the PID for this thread.  */
+   err = DB_GET_FIELD (cancelhandling, th->th_ta_p, th->th_unique, pthread,
+ 		      cancelhandling, 0);
+diff --git a/libpthread/nptl_db/td_thr_setgregs.c b/libpthread/nptl_db/td_thr_setgregs.c
+--- a/libpthread/nptl_db/td_thr_setgregs.c
++++ b/libpthread/nptl_db/td_thr_setgregs.c
+@@ -1,5 +1,5 @@
+ /* Set a thread's general register set.
+-   Copyright (C) 1999, 2001, 2002, 2003 Free Software Foundation, Inc.
++   Copyright (C) 1999, 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+    Contributed by Ulrich Drepper <drepper@redhat.com>, 1999.
+ 
+@@ -28,6 +28,11 @@ td_thr_setgregs (const td_thrhandle_t *th, prgregset_t gregs)
+ 
+   LOG ("td_thr_setgregs");
+ 
++  if (th->th_unique == 0)
++    /* Special case for the main thread before initialization.  */
++    return ps_lsetregs (th->th_ta_p->ph, ps_getpid (th->th_ta_p->ph),
++			gregs) != PS_OK ? TD_ERR : TD_OK;
++
+   /* We have to get the state and the PID for this thread.  */
+   err = DB_GET_FIELD (cancelhandling, th->th_ta_p, th->th_unique, pthread,
+ 		      cancelhandling, 0);
+diff --git a/libpthread/nptl_db/td_thr_tlsbase.c b/libpthread/nptl_db/td_thr_tlsbase.c
+--- a/libpthread/nptl_db/td_thr_tlsbase.c
++++ b/libpthread/nptl_db/td_thr_tlsbase.c
+@@ -1,5 +1,5 @@
+ /* Locate TLS data for a thread.
+-   Copyright (C) 2003, 2006 Free Software Foundation, Inc.
++   Copyright (C) 2003, 2006, 2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+ 
+    The GNU C Library is free software; you can redistribute it and/or
+@@ -29,8 +29,29 @@ td_thr_tlsbase (const td_thrhandle_t *th,
+   if (modid < 1)
+     return TD_NOTLS;
+ 
++  psaddr_t pd = th->th_unique;
++  if (pd == 0)
++    {
++      /* This is the fake handle for the main thread before libpthread
++	 initialization.  We are using 0 for its th_unique because we can't
++	 trust that its thread register has been initialized.  But we need
++	 a real pointer to have any TLS access work.  In case of dlopen'd
++	 libpthread, initialization might not be for quite some time.  So
++	 try looking up the thread register now.  Worst case, it's nonzero
++	 uninitialized garbage and we get bogus results for TLS access
++	 attempted too early.  Tough.  */
++
++      td_thrhandle_t main_th;
++      err = __td_ta_lookup_th_unique (th->th_ta_p, ps_getpid (th->th_ta_p->ph),
++				      &main_th);
++      if (err == 0)
++	pd = main_th.th_unique;
++      if (pd == 0)
++	return TD_TLSDEFER;
++    }
++
+   /* Get the DTV pointer from the thread descriptor.  */
+-  err = DB_GET_FIELD (dtv, th->th_ta_p, th->th_unique, pthread, dtvp, 0);
++  err = DB_GET_FIELD (dtv, th->th_ta_p, pd, pthread, dtvp, 0);
+   if (err != TD_OK)
+     return err;
+ 
+diff --git a/libpthread/nptl_db/td_thr_validate.c b/libpthread/nptl_db/td_thr_validate.c
+--- a/libpthread/nptl_db/td_thr_validate.c
++++ b/libpthread/nptl_db/td_thr_validate.c
+@@ -1,5 +1,5 @@
+ /* Validate a thread handle.
+-   Copyright (C) 1999, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
++   Copyright (C) 1999,2001,2002,2003,2004,2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+    Contributed by Ulrich Drepper <drepper@redhat.com>, 1999.
+ 
+@@ -74,16 +74,10 @@ td_thr_validate (const td_thrhandle_t *th)
+       if (err == TD_OK)
+ 	err = check_thread_list (th, list, &uninit);
+ 
+-      if (err == TD_NOTHR && uninit)
+-	{
+-	  /* __pthread_initialize_minimal has not run yet.
+-	     But the main thread still has a valid ID.  */
+-	  td_thrhandle_t main_th;
+-	  err = td_ta_map_lwp2thr (th->th_ta_p,
+-				   ps_getpid (th->th_ta_p->ph), &main_th);
+-	  if (err == TD_OK && th->th_unique != main_th.th_unique)
+-	    err = TD_NOTHR;
+-	}
++      if (err == TD_NOTHR && uninit && th->th_unique == 0)
++	/* __pthread_initialize_minimal has not run yet.
++	   There is only the special case thread handle.  */
++	err = TD_OK;
+     }
+ 
+   return err;
+diff --git a/libpthread/nptl_db/thread_dbP.h b/libpthread/nptl_db/thread_dbP.h
+--- a/libpthread/nptl_db/thread_dbP.h
++++ b/libpthread/nptl_db/thread_dbP.h
+@@ -1,5 +1,5 @@
+ /* Private header for thread debug library
+-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
++   Copyright (C) 2003, 2004, 2007 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+ 
+    The GNU C Library is free software; you can redistribute it and/or
+@@ -254,4 +254,7 @@ extern td_err_e _td_store_value_local (td_thragent_t *ta,
+ extern td_err_e _td_check_sizeof (td_thragent_t *ta, uint32_t *sizep,
+ 				  int sizep_name) attribute_hidden;
+ 
++extern td_err_e __td_ta_lookup_th_unique (const td_thragent_t *ta,
++					  lwpid_t lwpid, td_thrhandle_t *th);
++
+ #endif /* thread_dbP.h */
+--
+cgit v0.9.1
