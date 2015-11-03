@@ -1,0 +1,74 @@
+ldso: Allow use of executable RUNPATH/RPATH when finding libraries needed by other libraries.
+
+ Allow ldso to use the executables RUNPATH/RPATH to find libraries
+ needed by other libraries. Although, this change is not standart,
+ it cause the uclibc dynamic linker behavour to match the glibc's one.
+
+
+ P.S. Patch not compatible with upstream one's 409f149d
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+---
+
+diff --git a/ldso/ldso/dl-elf.c b/ldso/ldso/dl-elf.c
+--- a/ldso/ldso/dl-elf.c
++++ b/ldso/ldso/dl-elf.c
+@@ -227,12 +227,22 @@ struct elf_resolve *_dl_load_shared_libr
+ 	 * the default path of /usr/lib.  Check in rpath directories.
+ 	 */
+ #ifdef __LDSO_RUNPATH__
+-	pnt = (tpnt ? (char *) tpnt->dynamic_info[DT_RPATH] : NULL);
+-	if (pnt) {
+-		pnt += (unsigned long) tpnt->dynamic_info[DT_STRTAB];
+-		_dl_if_debug_dprint("\tsearching RPATH='%s'\n", pnt);
+-		if ((tpnt1 = search_for_named_library(libname, rflags, pnt, rpnt)) != NULL)
+-			return tpnt1;
++	if (tpnt) {
++		pnt = (char *) tpnt->dynamic_info[DT_RPATH];
++		if (pnt) {
++			pnt += (unsigned long) tpnt->dynamic_info[DT_STRTAB];
++		} else if (tpnt->libtype == elf_lib) {
++			/* Shared library hasn't RPATH, use executable one, like glibc */
++			pnt = (char *) _dl_loaded_modules->dynamic_info[DT_RPATH];
++			if (pnt)
++				pnt += (unsigned long) _dl_loaded_modules->dynamic_info[DT_STRTAB];
++		}
++		if (pnt) {
++			_dl_if_debug_dprint("\tsearching RPATH='%s'\n", pnt);
++			tpnt1 = search_for_named_library(libname, rflags, pnt, rpnt);
++			if (tpnt1 != NULL)
++				return tpnt1;
++		}
+ 	}
+ #endif
+ 
+@@ -250,12 +260,22 @@ struct elf_resolve *_dl_load_shared_libr
+ 	 * The ABI specifies that RUNPATH is searched after LD_LIBRARY_PATH.
+ 	 */
+ #ifdef __LDSO_RUNPATH__
+-	pnt = (tpnt ? (char *)tpnt->dynamic_info[DT_RUNPATH] : NULL);
+-	if (pnt) {
+-		pnt += (unsigned long) tpnt->dynamic_info[DT_STRTAB];
+-		_dl_if_debug_dprint("\tsearching RUNPATH='%s'\n", pnt);
+-		if ((tpnt1 = search_for_named_library(libname, rflags, pnt, rpnt)) != NULL)
+-			return tpnt1;
++	if (tpnt) {
++		pnt = (char *)tpnt->dynamic_info[DT_RUNPATH];
++		if (pnt) {
++			pnt += (unsigned long) tpnt->dynamic_info[DT_STRTAB];
++		} else if (tpnt->libtype == elf_lib) {
++			/* Shared library hasn't RUNPATH, use executable one, like glibc */
++			pnt = (char *) _dl_loaded_modules->dynamic_info[DT_RUNPATH];
++			if (pnt)
++				pnt += (unsigned long) _dl_loaded_modules->dynamic_info[DT_STRTAB];
++		}
++		if (pnt) {
++			_dl_if_debug_dprint("\tsearching RUNPATH='%s'\n", pnt);
++			tpnt1 = search_for_named_library(libname, rflags, pnt, rpnt);
++			if (tpnt1 != NULL)
++				return tpnt1;
++		}
+ 	}
+ #endif
+ 
+-- 
