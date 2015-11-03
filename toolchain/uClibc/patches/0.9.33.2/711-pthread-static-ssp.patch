@@ -1,0 +1,71 @@
+Timestamp: 10/12/15 16:21:54
+Author: Waldemar Brodkorb <wbx@uclibc-ng.org>
+Subject: fix static binaries linked with pthread and compiled with ssp
+
+    Move TLS initialization for static builds up to the calling
+    function as suggested by Daniel Fahlgren.
+
+    Reported-By: Daniel Fahlgren <daniel@fahlgren.se>
+
+--- a/libc/misc/internals/__uClibc_main.c	(revision 94246e65)
++++ b/libc/misc/internals/__uClibc_main.c	(revision a3312d22)
+@@ -33,4 +33,5 @@
+ #include <not-cancel.h>
+ #include <atomic.h>
++#include <tls.h>
+ #endif
+ #ifdef __UCLIBC_HAS_THREADS__
+@@ -133,4 +134,8 @@
+ #endif
+ 
++#ifndef SHARED
++extern void __libc_setup_tls (size_t tcbsize, size_t tcbalign);
++#endif
++
+ /* If __UCLIBC_FORMAT_SHARED_FLAT__, all array initialisation and finalisation
+  * is handled by the routines passed to __uClibc_main().  */
+@@ -244,4 +249,11 @@
+ 
+ #ifdef __UCLIBC_HAS_THREADS__
++
++#if defined (__UCLIBC_HAS_THREADS_NATIVE__) && !defined (SHARED)
++    /* Unlike in the dynamically linked case the dynamic linker has not
++       taken care of initializing the TLS data structures.  */
++    __libc_setup_tls (TLS_TCB_SIZE, TLS_TCB_ALIGN);
++#endif
++
+     /* Before we start initializing uClibc we have to call
+      * __pthread_initialize_minimal so we can use pthread_locks
+--- a/libpthread/nptl/init.c	(revision 94246e65)
++++ b/libpthread/nptl/init.c	(revision a3312d22)
+@@ -61,12 +61,6 @@
+ static const char nptl_version[] __attribute_used__ = VERSION;
+ 
+-
+-#ifndef SHARED
+-extern void __libc_setup_tls (size_t tcbsize, size_t tcbalign);
+-#endif
+-
+ #ifdef SHARED
+ static void nptl_freeres (void);
+-
+ 
+ static const struct pthread_functions pthread_functions =
+@@ -266,16 +260,4 @@
+   initialized = 1;
+ 
+-#ifndef SHARED
+-  /* Unlike in the dynamically linked case the dynamic linker has not
+-     taken care of initializing the TLS data structures.  */
+-  __libc_setup_tls (TLS_TCB_SIZE, TLS_TCB_ALIGN);
+-
+-  /* We must prevent gcc from being clever and move any of the
+-     following code ahead of the __libc_setup_tls call.  This function
+-     will initialize the thread register which is subsequently
+-     used.  */
+-  __asm__ __volatile__ ("");
+-#endif
+-
+   /* Minimal initialization of the thread descriptor.  */
+   struct pthread *pd = THREAD_SELF;
+-- 
