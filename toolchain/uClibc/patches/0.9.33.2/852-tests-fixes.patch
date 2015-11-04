@@ -1,0 +1,63 @@
+test: Minor fixes
+
+1) Fix timeout setup for tst-regex2
+
+2) Don't stop on a first failed test
+
+3) Fix test-skeleton.c faults on empty command line & glibc tests
+
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+diff --git a/test/Test.mak b/test/Test.mak
+--- a/test/Test.mak
++++ b/test/Test.mak
+@@ -75,9 +75,10 @@ define exec_test
+ 		test -z "$$expected_ret" && export expected_ret=0 ; \
+ 	if ! test $$ret -eq $$expected_ret ; then \
+ 		echo "ret == $$ret ; expected_ret == $$expected_ret" ; \
+-		echo "The output of failed test is:"; \
+-		cat "$(binary_name).out"; \
+-		exit 1 ; \
++		if [ -s "$(binary_name).out" ]; then \
++			echo "The output of failed test is:"; \
++			cat "$(binary_name).out"; \
++		fi; \
+ 	fi
+ 	$(SCAT) "$(binary_name).out"
+ endef
+diff --git b/test/regex/Makefile.in b/test/regex/Makefile.in
+new file mode 100644
+--- /dev/null
++++ b/test/regex/Makefile.in
+@@ -0,0 +1,2 @@
++
++WRAPPER := env TIMEOUTFACTOR=50
+diff --git a/test/regex/tst-regex2.c b/test/regex/tst-regex2.c
+--- a/test/regex/tst-regex2.c
++++ b/test/regex/tst-regex2.c
+@@ -245,6 +245,5 @@ do_test(void)
+ 	return exitcode;
+ }
+ 
+-#define TIMEOUT 20
+ #define TEST_FUNCTION do_test()
+ #include "../test-skeleton.c"
+diff --git a/test/test-skeleton.c b/test/test-skeleton.c
+--- a/test/test-skeleton.c
++++ b/test/test-skeleton.c
+@@ -289,9 +289,11 @@ main (int argc, char *argv[])
+   atexit (delete_temp_files);
+ 
+   /* Correct for the possible parameters.  */
+-  argv[optind - 1] = argv[0];
+-  argv += optind - 1;
+-  argc -= optind - 1;
++  if (optind > argc) {
++    argv[optind - 1] = argv[0];
++    argv += optind - 1;
++    argc -= optind - 1;
++  }
+ 
+   /* Call the initializing function, if one is available.  */
+ #ifdef PREPARE
