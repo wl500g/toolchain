@@ -1,0 +1,52 @@
+test: Isolate from host standart libraries if TEST_INSTALLED_UCLIBC not set
+
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+diff --git a/test/Rules.mak b/test/Rules.mak
+--- a/test/Rules.mak
++++ b/test/Rules.mak
+@@ -72,6 +72,10 @@ CFLAGS         += $(OPTIMIZATION) $(CPU_CFLAGS) $(XWARNINGS)
+ # Can't add $(OPTIMIZATION) here, it may be target-specific.
+ # Just adding -Os for now.
+ HOST_CFLAGS    += $(XCOMMON_CFLAGS) -Os $(XWARNINGS) -std=gnu99
++ifeq ($(ARCH_NATIVE_BIT),32)
++	HOST_CFLAGS   += -m32
++	HOST_LDFLAGS  += -m32
++endif
+ 
+ LDFLAGS        := $(CPU_LDFLAGS-y) -Wl,-z,now
+ ifeq ($(DODEBUG),y)
+@@ -89,14 +93,16 @@ ifneq ($(HAVE_SHARED),y)
+ endif
+ 
+ ifndef TEST_INSTALLED_UCLIBC
++CRT_OBJS := $(UCLIBC_PATH)/crt[1in].o
++LDFLAGS += -nostdlib -L$(UCLIBC_PATH)
+ LDFLAGS += -B$(UCLIBC_PATH) -Wl,-rpath=$(UCLIBC_PATH):$(shell pwd) -Wl,-rpath-link=$(UCLIBC_PATH):$(shell pwd)
+-else
+-LDFLAGS += -Wl,-rpath=$(shell pwd)
+-endif
+-
+ ifeq ($(findstring -static,$(LDFLAGS)),)
+ LDFLAGS += -Wl,--dynamic-linker=$(UCLIBC_PATH)/$(UCLIBC_LDSO)
+ endif
++else
++CRT_OBJS :=
++LDFLAGS += -Wl,-rpath=$(shell pwd)
++endif
+ 
+ ifeq ($(LDSO_GNU_HASH_SUPPORT),y)
+ # Check for binutils support is done on root Rules.mak
+diff --git a/test/Test.mak b/test/Test.mak
+--- a/test/Test.mak
++++ b/test/Test.mak
+@@ -101,7 +102,7 @@ $(MAKE_SRCS): Makefile $(TESTDIR)Makefile $(TESTDIR)Rules.mak $(TESTDIR)Test.mak
+ $(U_TARGETS): $(U_TARGET_SRCS) $(MAKE_SRCS)
+ 	$(showlink)
+ 	$(Q)$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$(notdir $(CURDIR))) $(CFLAGS_$@) -c $@.c -o $@.o
+-	$(Q)$(CC) $(LDFLAGS) $@.o -o $@ $(EXTRA_LDFLAGS) $(LDFLAGS_$@)
++	$(Q)$(CC) $(LDFLAGS) $(CRT_OBJS) $@.o -o $@ $(EXTRA_LDFLAGS) $(LDFLAGS_$@) -lc
+ 
+ $(G_TARGETS): $(U_TARGET_SRCS) $(MAKE_SRCS)
+ 	$(showlink)
