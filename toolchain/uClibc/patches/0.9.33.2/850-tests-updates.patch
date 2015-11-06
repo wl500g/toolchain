@@ -13,6 +13,9 @@ tests: Upstream fixes
  697dbb01 test: get out of the endless while loop, when bind failed
  fdebbe20 test: enable libm test log2
  7b660411 test: run test{,_glibc} adjacent
+ 74dd5ff4 test: update test-skeleton.c
+ 8b150a94 test: silence warning in skeleton
+ bad7c039 test: silence warning in testsuite.h
  85891447 test/math: Select correct ULPs for mips32/mips64
  b2812877 test/math: don't try to build test dep as test
  9902a14b test/math: add libm-test-ulps-{arm,mips32,mips64} files
@@ -117,6 +120,117 @@ diff --git a/test/Test.mak b/test/Test.mak
  # provide build rules even for disabled tests:
  U_TARGETS += $(TESTS_DISABLED)
  G_TARGETS += $(addsuffix _glibc,$(TESTS_DISABLED)) $(GLIBC_TESTS_DISABLED)
+diff --git a/test/test-skeleton.c b/test/test-skeleton.c
+--- a/test/test-skeleton.c
++++ b/test/test-skeleton.c
+@@ -104,7 +104,7 @@ __attribute__ ((unused))
+ create_temp_file (const char *base, char **filename)
+ {
+   char *fname;
+-  int fd;
++  int _fd;
+ 
+   fname = (char *) malloc (strlen (test_dir) + 1 + strlen (base)
+ 			   + sizeof ("XXXXXX"));
+@@ -115,8 +115,8 @@ create_temp_file (const char *base, char
+     }
+   strcpy (stpcpy (stpcpy (stpcpy (fname, test_dir), "/"), base), "XXXXXX");
+ 
+-  fd = mkstemp (fname);
+-  if (fd == -1)
++  _fd = mkstemp (fname);
++  if (_fd == -1)
+     {
+       printf ("cannot open temporary file '%s': %s\n", fname, strerror(errno));
+       free (fname);
+@@ -127,13 +127,13 @@ create_temp_file (const char *base, char
+   if (filename != NULL)
+     *filename = fname;
+ 
+-  return fd;
++  return _fd;
+ }
+ 
+ /* Timeout handler.  We kill the child and exit with an error.  */
+ static void
+ __attribute__ ((noreturn))
+-timeout_handler (int sig __attribute__ ((unused)))
++signal_handler (int sig __attribute__ ((unused)))
+ {
+   int killed = 0;
+   int status;
+@@ -168,6 +168,12 @@ timeout_handler (int sig __attribute__ (
+   CLEANUP_HANDLER;
+ #endif
+ 
++  if (sig == SIGINT)
++    {
++      signal (sig, SIG_DFL);
++      raise (sig);
++    }
++
+   /* If we expected this signal: good!  */
+ #ifdef EXPECTED_SIGNAL
+   if (EXPECTED_SIGNAL == SIGALRM)
+@@ -190,6 +196,7 @@ timeout_handler (int sig __attribute__ (
+   exit (1);
+ }
+ 
++#ifdef __XXX_HANDLE_CTRL_C
+ static void
+ __attribute__ ((noreturn))
+ handler_killpid(int sig)
+@@ -199,6 +206,7 @@ handler_killpid(int sig)
+ 	raise(sig); /* kill ourself */
+ 	_exit(128 + sig); /* paranoia */
+ }
++#endif
+ 
+ /* We provide the entry point here.  */
+ int
+@@ -345,18 +353,23 @@ main (int argc, char *argv[])
+       exit (1);
+     }
+ 
++#ifdef __XXX_HANDLE_CTRL_C
+   signal (SIGTERM, handler_killpid);
+   signal (SIGINT, handler_killpid);
+   signal (SIGQUIT, handler_killpid);
++#endif
+ 
+   /* Set timeout.  */
+ #ifndef TIMEOUT
+   /* Default timeout is two seconds.  */
+ # define TIMEOUT 2
+ #endif
+-  signal (SIGALRM, timeout_handler);
++  signal (SIGALRM, signal_handler);
+   alarm (TIMEOUT * timeoutfactor);
+ 
++  /* Make sure we clean up if the wrapper gets interrupted.  */
++  signal (SIGINT, signal_handler);
++
+   /* Wait for the regular termination.  */
+   termpid = TEMP_FAILURE_RETRY (waitpid (pid, &status, 0));
+   if (termpid == -1)
+diff --git a/test/testsuite.h b/test/testsuite.h
+--- a/test/testsuite.h
++++ b/test/testsuite.h
+@@ -27,11 +27,12 @@ void error_msg(int result, int line, const char* file, const char* command)
+ {
+ 	failures++;
+ 
+-	printf("\nFAILED TEST %lu: \n\t%s\n", (unsigned long)test_number, command);
++	printf("\nFAILED TEST %lu: \n\t%s\nResult: %d",
++			(unsigned long)test_number, command, result);
+ 	printf("AT LINE: %d, FILE: %s\n\n", line, file);
+ }
+ 
+-void success_msg(int result, const char* command)
++void success_msg(int result __attribute__((unused)), const char* command __attribute__((unused)))
+ {
+ #if 0
+ 	printf("passed test: %s == 0\n", command);
 diff --git a/test/dlopen/Makefile b/test/dlopen/Makefile
 --- a/test/dlopen/Makefile
 +++ b/test/dlopen/Makefile
