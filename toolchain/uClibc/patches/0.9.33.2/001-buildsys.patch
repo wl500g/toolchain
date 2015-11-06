@@ -4,6 +4,7 @@ buildsys: Upstream fixes
  5fe8fc1a buildsys: Do not build crt upon pregen
  143b7505 nptl: rephrase *.sym handling
  3010966c buildsys: swap V=1 with V=2 command printing
+ a58f1e2a buildsys: remove some obsolete optimization CFLAGS
 
 ---
 
@@ -105,6 +106,56 @@ diff --git a/Makerules b/Makerules
 diff --git a/Rules.mak b/Rules.mak
 --- a/Rules.mak
 +++ b/Rules.mak
+@@ -230,9 +230,17 @@ LDFLAG-fuse-ld := $(filter -fuse-ld=%,$(call qstrip,$(UCLIBC_EXTRA_CFLAGS)))
+ ARFLAGS:=cr
+ 
+ 
++$(eval $(call cache-output-var,GCC_VER,$(CC) -dumpversion))
++GCC_VER := $(subst ., ,$(GCC_VER))
++GCC_MAJOR_VER ?= $(word 1,$(GCC_VER))
++GCC_MINOR_VER ?= $(word 2,$(GCC_VER))
++
+ # Flags in OPTIMIZATION are used only for non-debug builds
+ 
+ OPTIMIZATION:=
++OPTIMIZATION-$(GCC_MAJOR_VER):=
++OPTIMIZATION-$(GCC_MAJOR_VER).$(GCC_MINOR_VER):=
++
+ # Use '-Os' optimization if available, else use -O2, allow Config to override
+ $(eval $(call check-gcc-var,-Os))
+ ifneq ($(CFLAG_-Os),)
+@@ -243,29 +251,9 @@ OPTIMIZATION += $(CFLAG_-O2)
+ endif
+ # Use the gcc 3.4 -funit-at-a-time optimization when available
+ $(eval $(call check-gcc-var,-funit-at-a-time))
+-OPTIMIZATION += $(CFLAG_-funit-at-a-time)
+-# shrinks code by about 0.1%
+-$(eval $(call check-gcc-var,-fmerge-all-constants))
++OPTIMIZATION-3.4 += $(CFLAG_-funit-at-a-time)
+ $(eval $(call check-gcc-var,-fstrict-aliasing))
+-OPTIMIZATION += $(CFLAG_-fmerge-all-constants) $(CFLAG_-fstrict-aliasing)
+-
+-$(eval $(call cache-output-var,GCC_VER,$(CC) -dumpversion))
+-GCC_VER := $(subst ., ,$(GCC_VER))
+-GCC_MAJOR_VER ?= $(word 1,$(GCC_VER))
+-#GCC_MINOR_VER ?= $(word 2,$(GCC_VER))
+-
+-ifeq ($(GCC_MAJOR_VER),4)
+-# shrinks code, results are from 4.0.2
+-# 0.36%
+-$(eval $(call check-gcc-var,-fno-tree-loop-optimize))
+-OPTIMIZATION += $(CFLAG_-fno-tree-loop-optimize)
+-# 0.34%
+-$(eval $(call check-gcc-var,-fno-tree-dominator-opts))
+-OPTIMIZATION += $(CFLAG_-fno-tree-dominator-opts)
+-# 0.1%
+-$(eval $(call check-gcc-var,-fno-strength-reduce))
+-OPTIMIZATION += $(CFLAG_-fno-strength-reduce)
+-endif
++OPTIMIZATION += $(CFLAG_-fstrict-aliasing)
+ 
+ 
+ # CPU_CFLAGS-y contain options which are not warnings,
 @@ -296,6 +296,8 @@ CPU_CFLAGS-y := -funsigned-char -fno-builtin
  
  $(eval $(call check-gcc-var,-fno-asm))
@@ -114,6 +165,15 @@ diff --git a/Rules.mak b/Rules.mak
  
  LDADD_LIBFLOAT=
  ifeq ($(UCLIBC_HAS_SOFT_FLOAT),y)
+@@ -677,6 +663,8 @@ ifeq ($(DODEBUG),y)
+ CFLAGS += -O0 -g3 -DDEBUG
+ else
+ CFLAGS += $(OPTIMIZATION)
++CFLAGS += $(OPTIMIZATION-$(GCC_MAJOR_VER))
++CFLAGS += $(OPTIMIZATION-$(GCC_MAJOR_VER).$(GCC_MINOR_VER))
+ endif
+ ifeq ($(DOSTRIP),y)
+ LDFLAGS += -Wl,-s
 @@ -796,3 +796,5 @@ SHARED_END_FILES:=$(LIBGCC_DIR)crtendS.o $(top_builddir)lib/crtn.o
  endif
  
