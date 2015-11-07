@@ -1,0 +1,416 @@
+1) Fix tst-cancel4 test - use of mkstemp() with following bind()
+   always produce EADDRINUSE error, change it to mktemp(). 
+
+2) More glibc tests enabled via simple pthreadP.h wrapper
+
+3) tst-cancel4.c - increase WRITE_BUFFER_SIZE, follow glibc
+
+diff --git a/test/nptl/Makefile.in b/test/nptl/Makefile.in
+--- a/test/nptl/Makefile.in
++++ b/test/nptl/Makefile.in
+@@ -69,6 +69,7 @@ GLIBC_TESTS_DISABLED := tst-eintr1_glibc tst-eintr2_glibc \
+ 	tst-getpid1_glibc tst-getpid2_glibc \
+ 	tst-sem11_glibc tst-sem12_glibc
+ 
++HOST_CFLAGS += -Iglibc-include
+ 
+ ifeq ($(HAVE_SHARED),)
+ TESTS_DISABLED += tst-tls3 tst-tls4 tst-tls5
+@@ -203,16 +204,16 @@
+ tst-cleanup4aux.o:
+ 	$(Q)$(CC) $(CFLAGS) $(CFLAGS_$@) $(EXTRA_CFLAGS) -c tst-cleanup4aux.c -o $@
+ 
+-tst-cleanup4: tst-cleanup4aux.o
++tst-cleanup4 tst-cleanup4_glibc: tst-cleanup4aux.o
+ tst-tls3: tst-tls3mod.so
+ tst-tls4: tst-tls4moda.so tst-tls4modb.so
+ tst-tls5: tst-tls5mod.so
+ 
+ tst-cleanupx4 : tst-cleanup4aux.o
+-tst-fini1: tst-fini1mod.so
++tst-fini1 tst-fini1_glibc: tst-fini1mod.so
+ 
+ OPTS_tst-cancel7 = --command ./tst-cancel7
+ OPTS_tst-mqueue7 = -- ./tst-mqueue7
+ OPTS_tst-exec4 = ./tst-exec4
+ 
+-WRAPPER := env LD_LIBRARY_PATH="$$PWD:.:$(LD_LIBRARY_PATH)" TIMEOUTFACTOR=100
++WRAPPER := env LD_LIBRARY_PATH="$$PWD:.:$(LD_LIBRARY_PATH)" TIMEOUTFACTOR=10
+diff --git b/test/nptl/glibc-include/pthreadP.h b/test/nptl/glibc-include/pthreadP.h
+new file mode 100644
+--- /dev/null
++++ b/test/nptl/glibc-include/pthreadP.h
+@@ -0,0 +1,11 @@
++/* Wrapper for glibc tests */
++
++#ifndef _PTHREADP_H
++#define _PTHREADP_H	1
++
++#include <pthread.h>
++
++/* The signal used for asynchronous cancelation.  */
++#define SIGCANCEL       __SIGRTMIN
++
++#endif	/* pthreadP.h */
+diff --git a/test/nptl/tst-cancel4.c b/test/nptl/tst-cancel4.c
+--- a/test/nptl/tst-cancel4.c
++++ b/test/nptl/tst-cancel4.c
+@@ -84,7 +84,30 @@ static pthread_barrier_t b2;
+ # define IPC_ADDVAL 0
+ #endif
+ 
+-#define WRITE_BUFFER_SIZE 4096
++/* The WRITE_BUFFER_SIZE value needs to be choosen such that if we set
++   the socket send buffer size to '1', a write of this size on that
++   socket will block.
++
++   The Linux kernel imposes a minimum send socket buffer size which
++   has changed over the years.  As of Linux 3.10 the value is:
++
++     2 * (2048 + SKB_DATA_ALIGN(sizeof(struct sk_buff)))
++
++   which is attempting to make sure that with standard MTUs,
++   TCP can always queue up at least 2 full sized packets.
++
++   Furthermore, there is logic in the socket send paths that
++   will allow one more packet (of any size) to be queued up as
++   long as some socket buffer space remains.   Blocking only
++   occurs when we try to queue up a new packet and the send
++   buffer space has already been fully consumed.
++
++   Therefore we must set this value to the largest possible value of
++   the formula above (and since it depends upon the size of "struct
++   sk_buff", it is dependent upon machine word size etc.) plus some
++   slack space.  */
++
++#define WRITE_BUFFER_SIZE 16384
+ 
+ /* Cleanup handling test.  */
+ static int cl_called;
+@@ -760,7 +783,11 @@ tf_sigpause (void *arg)
+   pthread_cleanup_push (cl, NULL);
+ 
+   /* Just for fun block the cancellation signal.  */
++#ifdef SIGCANCEL
+   sigpause (SIGCANCEL);
++#else
++  pause ();
++#endif
+ 
+   pthread_cleanup_pop (0);
+ 
+@@ -975,7 +1002,6 @@ tf_pause (void *arg)
+ static void *
+ tf_accept (void *arg)
+ {
+-  int tfd;
+   struct sockaddr_un sun;
+   /* To test a non-blocking accept call we make the call file by using
+      a datagrame socket.  */
+@@ -1002,25 +1002,21 @@ tf_accept (void *arg)
+ 	}
+ 
+       strcpy (sun.sun_path, "/tmp/tst-cancel4-socket-1-XXXXXX");
+-      tfd = mkstemp(sun.sun_path);
+-      if (tfd < 0)
++      if (mktemp(sun.sun_path) == NULL)
+ 	{
+ 	  printf ("%s: cannot generate temp file name\n", __FUNCTION__);
+ 	  exit (1);
+ 	}
+-      close(tfd);
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
+-
+-  unlink (sun.sun_path);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+ 
+   listen (tempfd, 5);
+ 
+   socklen_t len = sizeof (sun);
+ 
++  unlink (sun.sun_path);
++
+   int r = pthread_barrier_wait (&b2);
+   if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
+     {
+@@ -1050,7 +1072,6 @@ tf_accept (void *arg)
+ static void *
+ tf_send (void *arg)
+ {
+-  int tfd;
+   struct sockaddr_un sun;
+ 
+   tempfd = socket (AF_UNIX, SOCK_STREAM, 0);
+@@ -1066,21 +1087,18 @@ tf_send (void *arg)
+       if (++tries > 10)
+ 	{
+ 	  printf ("%s: too many unsuccessful bind calls\n", __FUNCTION__);
++	  exit (1);
+ 	}
+ 
+       strcpy (sun.sun_path, "/tmp/tst-cancel4-socket-2-XXXXXX");
+-      tfd = mkstemp(sun.sun_path);
+-      if (tfd < 0)
++      if (mktemp(sun.sun_path) == NULL)
+ 	{
+ 	  printf ("%s: cannot generate temp file name\n", __FUNCTION__);
+ 	  exit (1);
+ 	}
+-      close(tfd);
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+ 
+   listen (tempfd, 5);
+ 
+@@ -1134,7 +1152,6 @@ tf_send (void *arg)
+ static void *
+ tf_recv (void *arg)
+ {
+-  int tfd;
+   struct sockaddr_un sun;
+ 
+   tempfd = socket (AF_UNIX, SOCK_STREAM, 0);
+@@ -1150,21 +1167,18 @@ tf_recv (void *arg)
+       if (++tries > 10)
+ 	{
+ 	  printf ("%s: too many unsuccessful bind calls\n", __FUNCTION__);
++	  exit (1);
+ 	}
+ 
+       strcpy (sun.sun_path, "/tmp/tst-cancel4-socket-3-XXXXXX");
+-      tfd = mkstemp(sun.sun_path);
+-      if (tfd < 0)
++      if (mktemp(sun.sun_path) == NULL)
+ 	{
+ 	  printf ("%s: cannot generate temp file name\n", __FUNCTION__);
+ 	  exit (1);
+ 	}
+-      close(tfd);
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+ 
+   listen (tempfd, 5);
+ 
+@@ -1217,7 +1231,6 @@ tf_recv (void *arg)
+ static void *
+ tf_recvfrom (void *arg)
+ {
+-  int tfd;
+   struct sockaddr_un sun;
+ 
+   tempfd = socket (AF_UNIX, SOCK_DGRAM, 0);
+@@ -1233,21 +1246,18 @@ tf_recvfrom (void *arg)
+       if (++tries > 10)
+ 	{
+ 	  printf ("%s: too many unsuccessful bind calls\n", __FUNCTION__);
++	  exit (1);
+ 	}
+ 
+       strcpy (sun.sun_path, "/tmp/tst-cancel4-socket-4-XXXXXX");
+-      tfd = mkstemp(sun.sun_path);
+-      if (tfd < 0)
++      if (mktemp(sun.sun_path) == NULL)
+ 	{
+ 	  printf ("%s: cannot generate temp file name\n", __FUNCTION__);
+ 	  exit (1);
+ 	}
+-      close(tfd);
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+ 
+   tempfname = strdup (sun.sun_path);
+ 
+@@ -1258,6 +1268,8 @@ tf_recvfrom (void *arg)
+       exit (1);
+     }
+ 
++  unlink (sun.sun_path);
++
+   int r = pthread_barrier_wait (&b2);
+   if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
+     {
+@@ -1294,7 +1306,6 @@ tf_recvfrom (void *arg)
+ static void *
+ tf_recvmsg (void *arg)
+ {
+-  int tfd;
+   struct sockaddr_un sun;
+ 
+   tempfd = socket (AF_UNIX, SOCK_DGRAM, 0);
+@@ -1310,21 +1321,18 @@ tf_recvmsg (void *arg)
+       if (++tries > 10)
+ 	{
+ 	  printf ("%s: too many unsuccessful bind calls\n", __FUNCTION__);
++	  exit (1);
+ 	}
+ 
+       strcpy (sun.sun_path, "/tmp/tst-cancel4-socket-5-XXXXXX");
+-      tfd = mkstemp(sun.sun_path);
+-      if (tfd < 0)
++      if (mktemp(sun.sun_path) == NULL)
+ 	{
+ 	  printf ("%s: cannot generate temp file name\n", __FUNCTION__);
+ 	  exit (1);
+ 	}
+-      close(tfd);
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+ 
+   tempfname = strdup (sun.sun_path);
+ 
+@@ -1335,6 +1343,8 @@ tf_recvmsg (void *arg)
+       exit (1);
+     }
+ 
++  unlink (sun.sun_path);
++
+   int r = pthread_barrier_wait (&b2);
+   if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
+     {
+@@ -1672,7 +1682,6 @@ tf_msync (void *arg)
+ static void *
+ tf_sendto (void *arg)
+ {
+-  int tfd;
+   if (arg == NULL)
+     // XXX If somebody can provide a portable test case in which sendto()
+     // blocks we can enable this test to run in both rounds.
+@@ -1693,21 +1702,18 @@ tf_sendto (void *arg)
+       if (++tries > 10)
+ 	{
+ 	  printf ("%s: too many unsuccessful bind calls\n", __FUNCTION__);
++	  exit (1);
+ 	}
+ 
+       strcpy (sun.sun_path, "/tmp/tst-cancel4-socket-6-XXXXXX");
+-      tfd = mkstemp(sun.sun_path);
+-      if (tfd < 0)
++      if (mktemp(sun.sun_path) == NULL)
+ 	{
+ 	  printf ("%s: cannot generate temp file name\n", __FUNCTION__);
+ 	  exit (1);
+ 	}
+-      close(tfd);
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+   tempfname = strdup (sun.sun_path);
+ 
+   tempfd2 = socket (AF_UNIX, SOCK_DGRAM, 0);
+@@ -1724,6 +1730,8 @@ tf_sendto (void *arg)
+       exit (1);
+     }
+ 
++  unlink (sun.sun_path);
++
+   r = pthread_barrier_wait (&b2);
+   if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
+     {
+@@ -1750,7 +1758,6 @@ tf_sendto (void *arg)
+ static void *
+ tf_sendmsg (void *arg)
+ {
+-  int tfd;
+   if (arg == NULL)
+     // XXX If somebody can provide a portable test case in which sendmsg()
+     // blocks we can enable this test to run in both rounds.
+@@ -1771,21 +1778,18 @@ tf_sendmsg (void *arg)
+       if (++tries > 10)
+ 	{
+ 	  printf ("%s: too many unsuccessful bind calls\n", __FUNCTION__);
++          exit (1);
+ 	}
+ 
+       strcpy (sun.sun_path, "/tmp/tst-cancel4-socket-7-XXXXXX");
+-      tfd = mkstemp(sun.sun_path);
+-      if (tfd < 0)
++      if (mktemp(sun.sun_path) == NULL)
+ 	{
+ 	  printf ("%s: cannot generate temp file name\n", __FUNCTION__);
+ 	  exit (1);
+ 	}
+-      close(tfd);
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+   tempfname = strdup (sun.sun_path);
+ 
+   tempfd2 = socket (AF_UNIX, SOCK_DGRAM, 0);
+@@ -1802,6 +1806,8 @@ tf_sendmsg (void *arg)
+       exit (1);
+     }
+ 
++  unlink (sun.sun_path);
++
+   r = pthread_barrier_wait (&b2);
+   if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
+     {
+@@ -1872,7 +1878,6 @@ tf_creat (void *arg)
+ static void *
+ tf_connect (void *arg)
+ {
+-  int tfd;
+   if (arg == NULL)
+     // XXX If somebody can provide a portable test case in which connect()
+     // blocks we can enable this test to run in both rounds.
+@@ -1893,21 +1898,18 @@ tf_connect (void *arg)
+       if (++tries > 10)
+ 	{
+ 	  printf ("%s: too many unsuccessful bind calls\n", __FUNCTION__);
++	  exit (1);
+ 	}
+ 
+       strcpy (sun.sun_path, "/tmp/tst-cancel4-socket-2-XXXXXX");
+-      tfd = mkstemp(sun.sun_path);
+-      if (tfd < 0)
++      if (mktemp(sun.sun_path) == NULL)
+ 	{
+ 	  printf ("%s: cannot generate temp file name\n", __FUNCTION__);
+ 	  exit (1);
+ 	}
+-      close(tfd);
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+   tempfname = strdup (sun.sun_path);
+ 
+   listen (tempfd, 5);
+@@ -1919,6 +1921,8 @@ tf_connect (void *arg)
+       exit (1);
+     }
+ 
++  unlink (sun.sun_path);
++
+   int r = pthread_barrier_wait (&b2);
+   if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
+     {
+-- 

@@ -20059,14 +20059,13 @@ diff --git a/test/misc/Makefile.in b/test/misc/Makefile.in
 diff --git a/test/nptl/Makefile.in b/test/nptl/Makefile.in
 --- a/test/nptl/Makefile.in
 +++ b/test/nptl/Makefile.in
-@@ -64,7 +64,11 @@ endif
+@@ -64,7 +64,10 @@ endif
  
  GLIBC_TESTS_DISABLED := tst-eintr1_glibc tst-eintr2_glibc \
  	tst-eintr3_glibc tst-eintr4_glibc tst-eintr5_glibc \
 -	tst-tls1_glibc tst-tls2_glibc
 +	tst-tls1_glibc tst-tls2_glibc \
-+	tst-cancel25_glibc tst-cancel4_glibc tst-cancel5_glibc \
-+	tst-cancelx4_glibc tst-signal7_glibc tst-typesizes_glibc \
++	tst-signal7_glibc tst-typesizes_glibc \
 +	tst-getpid1_glibc tst-getpid2_glibc \
 +	tst-sem11_glibc tst-sem12_glibc
  
