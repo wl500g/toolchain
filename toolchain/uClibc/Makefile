@@ -17,9 +17,7 @@ PKG_SOURCE_URL:=http://www.uclibc.org/downloads
 endif
 PATCH_DIR:=./patches/$(PKG_VERSION)
 CONFIG_DIR:=./config/$(PKG_VERSION)
-
 PKG_SOURCE:=uClibc-$(PKG_VERSION).tar.bz2
-PKG_CAT:=bzcat
 
 STAGING_DIR_HOST:=$(TOOLCHAIN_DIR)
 BUILD_DIR_HOST:=$(BUILD_DIR_TOOLCHAIN)
