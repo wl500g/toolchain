@@ -27,7 +27,7 @@
 curdir:=toolchain
 
 # subdirectories to descend into
-$(curdir)/builddirs := kernel-headers $(if $(CONFIG_GDB),gdb) binutils gcc/minimal gcc/initial gcc/final uClibc
+$(curdir)/builddirs := kernel-headers $(if $(CONFIG_GDB),gdb) binutils gcc/minimal gcc/initial gcc/final uClibc $(if $(CONFIG_GDB),gdb/gdbserver)
 $(curdir)/builddirs-compile:=. $(filter-out kernel-headers,$($(curdir)/builddirs))
 $(curdir)/builddirs-install:=$($(curdir)/builddirs-compile)
 
@@ -41,6 +41,8 @@ $(curdir)/gcc/final/prepare:=$(curdir)/gcc/initial/prepare
 $(curdir)/uClibc/compile:=$(curdir)/gcc/initial/install
 $(curdir)/gcc/final/compile:=$(curdir)/uClibc/compile
 $(curdir)/uClibc/install:=$(curdir)/gcc/final/install
+$(curdir)/gdb/gdbserver/prepare:=$(curdir)/gdb/compile
+$(curdir)/gdb/gdbserver/compile:=$(curdir)/gcc/final/install
 
 ifneq ($(ARCH),)
   $(TOOLCHAIN_DIR)/info.mk: .config
