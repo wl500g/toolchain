@@ -1,3 +1,8 @@
+bsd supports the same floating point classification functions as c99,
+ fixes inetd
+
+ OpenWRT patch
+
 --- a/include/math.h
 +++ b/include/math.h
 @@ -195,7 +195,7 @@ extern int signgam;

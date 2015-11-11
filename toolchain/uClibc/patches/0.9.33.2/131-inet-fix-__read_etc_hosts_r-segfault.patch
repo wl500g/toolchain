@@ -1,3 +1,8 @@
+fix a crash in read_etc_hosts_r() that occurs if more than five
+ hostnames follow a dotted quad in /etc/hosts
+
+ OpenWRT patch
+
 --- a/libc/inet/resolv.c
 +++ b/libc/inet/resolv.c
 @@ -1631,6 +1631,7 @@ int attribute_hidden __read_etc_hosts_r(

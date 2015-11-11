@@ -23,17 +23,17 @@ diff --git a/test/Rules.mak b/test/Rules.mak
  ifndef TEST_INSTALLED_UCLIBC
 +CRT_OBJS := $(UCLIBC_PATH)/crt[1in].o
 +LDFLAGS += -nostdlib -L$(UCLIBC_PATH)
- LDFLAGS += -B$(UCLIBC_PATH) -Wl,-rpath=$(UCLIBC_PATH):$(shell pwd) -Wl,-rpath-link=$(UCLIBC_PATH):$(shell pwd)
+ LDFLAGS += -B$(UCLIBC_PATH) -Wl,-rpath,$(UCLIBC_PATH):$(shell pwd) -Wl,-rpath-link,$(UCLIBC_PATH):$(shell pwd)
 -else
--LDFLAGS += -Wl,-rpath=$(shell pwd)
+-LDFLAGS += -Wl,-rpath,$(shell pwd)
 -endif
 -
  ifeq ($(findstring -static,$(LDFLAGS)),)
- LDFLAGS += -Wl,--dynamic-linker=$(UCLIBC_PATH)/$(UCLIBC_LDSO)
+ LDFLAGS += -Wl,--dynamic-linker,$(UCLIBC_PATH)/$(UCLIBC_LDSO)
  endif
 +else
 +CRT_OBJS :=
-+LDFLAGS += -Wl,-rpath=$(shell pwd)
++LDFLAGS += -Wl,-rpath,$(shell pwd)
 +endif
  
  ifeq ($(LDSO_GNU_HASH_SUPPORT),y)

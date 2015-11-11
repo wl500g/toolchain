@@ -1,3 +1,9 @@
+use the arch specific thread stack size for nptl if the size
+ returned by getrlimits exceeds it - fixes threads on systems
+ with only 16 MB RAM
+
+ OpenWRT patch
+
 --- a/libpthread/nptl/init.c
 +++ b/libpthread/nptl/init.c
 @@ -402,6 +402,10 @@ __pthread_initialize_minimal_internal (v
