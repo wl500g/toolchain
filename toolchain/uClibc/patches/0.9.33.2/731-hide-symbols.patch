@@ -6,8 +6,37 @@ hide internal symbols
  a9b153b6 resolv.c,time.c,_atexit.c: hide 3 locks
  fee40347 getpagesize.c, unistd.h: hide __pagesize
  7431f726 malloc.h: hide internal functions (mainly debug related)
+ 0eb904a8 fputc.c, stdio.h: no need for hidden putc, putc_unlocked and fputc_unlocked
+
 ---
 
+diff --git a/include/stdio.h b/include/stdio.h
+--- a/include/stdio.h
++++ b/include/stdio.h
+@@ -519,7 +519,6 @@ __BEGIN_NAMESPACE_STD
+ extern int fputc (int __c, FILE *__stream);
+ libc_hidden_proto(fputc)
+ extern int putc (int __c, FILE *__stream);
+-libc_hidden_proto(putc)
+ 
+ /* Write a character to stdout.
+ 
+@@ -540,7 +539,6 @@ __END_NAMESPACE_STD
+    or due to the implementation it is a cancellation point and
+    therefore not marked with __THROW.  */
+ extern int fputc_unlocked (int __c, FILE *__stream);
+-libc_hidden_proto(fputc_unlocked)
+ #endif /* Use MISC.  */
+ 
+ #if defined __USE_POSIX || defined __USE_MISC
+@@ -549,7 +547,6 @@ libc_hidden_proto(fputc_unlocked)
+    These functions are possible cancellation points and therefore not
+    marked with __THROW.  */
+ extern int putc_unlocked (int __c, FILE *__stream);
+-libc_hidden_proto(putc_unlocked)
+ extern int putchar_unlocked (int __c);
+ 
+ /* SUSv3 allows putc_unlocked to be a macro */
 diff --git a/include/unistd.h b/include/unistd.h
 --- a/include/unistd.h
 +++ b/include/unistd.h
@@ -46,7 +75,7 @@ diff --git a/libc/inet/resolv.c b/libc/inet/resolv.c
 diff --git a/libc/misc/internals/__uClibc_main.c b/libc/misc/internals/__uClibc_main.c
 --- a/libc/misc/internals/__uClibc_main.c
 +++ b/libc/misc/internals/__uClibc_main.c
-@@ -222,8 +222,7 @@ static int __check_suid(void)
+@@ -234,8 +234,7 @@ static int __check_suid(void)
   * __uClibc_main.
   */
  
@@ -56,7 +85,7 @@ diff --git a/libc/misc/internals/__uClibc_main.c b/libc/misc/internals/__uClibc_
  void __uClibc_init(void)
  {
      /* Don't recurse */
-@@ -276,7 +275,6 @@ void __uClibc_init(void)
+@@ -295,7 +294,6 @@ void __uClibc_init(void)
  	_stdio_init();
  
  }
@@ -64,7 +93,7 @@ diff --git a/libc/misc/internals/__uClibc_main.c b/libc/misc/internals/__uClibc_
  
  #ifdef __UCLIBC_CTOR_DTOR__
  void attribute_hidden (*__app_fini)(void) = NULL;
-@@ -284,8 +282,7 @@ void attribute_hidden (*__app_fini)(void) = NULL;
+@@ -303,8 +301,7 @@ void attribute_hidden (*__app_fini)(void) = NULL;
  
  void attribute_hidden (*__rtld_fini)(void) = NULL;
  
@@ -74,7 +103,7 @@ diff --git a/libc/misc/internals/__uClibc_main.c b/libc/misc/internals/__uClibc_
  void __uClibc_fini(void)
  {
  #ifdef __UCLIBC_CTOR_DTOR__
-@@ -304,7 +301,6 @@ void __uClibc_fini(void)
+@@ -323,7 +320,6 @@ void __uClibc_fini(void)
      if (__rtld_fini != NULL)
  	(__rtld_fini)();
  }
@@ -94,6 +123,33 @@ diff --git a/libc/misc/time/time.c b/libc/misc/time/time.c
  
  extern rule_struct _time_tzinfo[2] attribute_hidden;
  
+diff --git a/libc/stdio/fputc.c b/libc/stdio/fputc.c
+--- a/libc/stdio/fputc.c
++++ b/libc/stdio/fputc.c
+@@ -72,16 +72,13 @@ int __fputc_unlocked(int c, register FILE *stream)
+ libc_hidden_def(__fputc_unlocked)
+ 
+ strong_alias(__fputc_unlocked,fputc_unlocked)
+-libc_hidden_def(fputc_unlocked)
+ 
+ strong_alias(__fputc_unlocked,putc_unlocked)
+-libc_hidden_def(putc_unlocked)
+ #ifndef __UCLIBC_HAS_THREADS__
+ strong_alias(__fputc_unlocked,fputc)
+ libc_hidden_def(fputc)
+ 
+ strong_alias(__fputc_unlocked,putc)
+-libc_hidden_def(putc)
+ #endif
+ 
+ #elif defined __UCLIBC_HAS_THREADS__
+@@ -101,6 +98,5 @@ int fputc(int c, register FILE *stream)
+ libc_hidden_def(fputc)
+ 
+ strong_alias(fputc,putc)
+-libc_hidden_def(putc)
+ 
+ #endif
 diff --git a/libc/stdlib/_atexit.c b/libc/stdlib/_atexit.c
 --- a/libc/stdlib/_atexit.c
 +++ b/libc/stdlib/_atexit.c
@@ -106,7 +162,7 @@ diff --git a/libc/stdlib/_atexit.c b/libc/stdlib/_atexit.c
  
  
  
-@@ -328,8 +328,7 @@ extern void weak_function _stdio_term(void) attribute_hidden;
+@@ -318,8 +318,7 @@ extern void weak_function _stdio_term(void) attribute_hidden;
  attribute_hidden void (*__exit_cleanup)(int) = 0;
  __UCLIBC_MUTEX_INIT(__atexit_lock, PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP);
  
