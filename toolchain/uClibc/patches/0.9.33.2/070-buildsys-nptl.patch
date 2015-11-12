@@ -1,0 +1,557 @@
+buildsys: fix IS_IN_lib*
+
+ Upstream commits
+ 41537a77 buildsys: fix IS_IN_lib*
+ 343f6b8f buildsys: fix IS_IN_lib* for out-of-tree builds
+ 5d3c0cc2 buildsys: fix IS_IN_lib* for .i
+ c846358a buildsys: fix IS_IN_lib* for .s
+
+---
+
+diff --git a/Makerules b/Makerules
+--- a/Makerules
++++ b/Makerules
+@@ -26,6 +26,29 @@ endif
+ objs: all_objs
+ $(lib-so-y) $(lib-a-y): | $(top_builddir)lib
+ 
++# apply unconditional per-directory flags
++define add_IS_IN_lib
++ifneq ($(strip $(2)),)
++__add_IS_IN_lib := $(2)
++__add_IS_IN_lib += $(2:.o=.i) $(2:.os=.i) $(2:.oS=.i)
++__add_IS_IN_lib += $(2:.o=.s) $(2:.os=.s) $(2:.oS=.s)
++$$(__add_IS_IN_lib): CFLAGS-for-library-members:=$(CFLAGS-$(1)) -DIN_LIB=$(word 1,$(subst /, ,$(1)))
++endif
++endef
++$(eval $(call add_IS_IN_lib,rtld,$(ldso-y)))
++$(eval $(call add_IS_IN_lib,libc,$(libc-y) $(libc-static-y) $(libc-y:.o=.os) $(libc-shared-y) $(libc-nonshared-y)))
++$(eval $(call add_IS_IN_lib,libcrypt,$(libcrypt-a-y) $(libcrypt-so-y)))
++$(eval $(call add_IS_IN_lib,libdl,$(libdl-a-y) $(libdl-so-y)))
++$(eval $(call add_IS_IN_lib,libintl,$(libintl-a-y) $(libintl-so-y)))
++$(eval $(call add_IS_IN_lib,libm,$(libm-a-y) $(libm-so-y)))
++$(eval $(call add_IS_IN_lib,libnsl,$(libnsl-a-y) $(libnsl-so-y)))
++$(eval $(call add_IS_IN_lib,libpthread/$(PTNAME),$(libpthread-a-y) $(libpthread-so-y) $(libpthread-nonshared-y)))
++$(eval $(call add_IS_IN_lib,libpthread/$(PTNAME)_db,$(libthread_db-a-y) $(libthread_db-so-y)))
++$(eval $(call add_IS_IN_lib,libresolv,$(libresolv-a-y) $(libresolv-so-y)))
++$(eval $(call add_IS_IN_lib,librt,$(librt-a-y) $(librt-so-y)))
++$(eval $(call add_IS_IN_lib,libutil,$(libutil-a-y) $(libutil-so-y)))
++$(eval $(call add_IS_IN_lib,libubacktrace,$(libubacktrace-a-y) $(libubacktrace-so-y)))
++
+ shared_objs = $(libc-y:.o=.os) $(libc-shared-y) $(libc-nonshared-y) \
+ 	$(libcrypt-so-y) $(libdl-so-y) \
+ 	$(libintl-so-y) $(libm-so-y) $(libnsl-so-y) \
+@@ -224,14 +247,19 @@ maybe_exec = \
+ #collect_multi_flags = $(CFLAGS-$(notdir $(d))) $(CFLAGS-$(notdir $(patsubst %/,%,$(dir $(d)))))
+ collect_multi_flags = $(CFLAGS-$(notdir $(patsubst %/,%,$(dir $(d)))))
+ 
++#sub_srcdir = $(word 1,$(filter-out lib extra locale libpthread,$(wordlist 1,2,$(subst /, ,$(subst $(top_srcdir),,$(dir $<))))))
++
+ CFLAGS_gen.dep = -MT $@ -MD -MP -MF $(dir $@).$(notdir $@).dep
+ 
+-cmd_compile.c = $(CC) -c $< -o $@ $(CFLAGS) \
++cmd_compile.c = $(CC) -c $< -o $@ \
++    $(filter-out $(CFLAGS-OMIT-$(notdir $<)), \
++        $(CFLAGS) \
++        $(CFLAGS-for-library-members) \
+ 	$(CFLAGS-$(suffix $@)) \
+-	$(filter-out $(CFLAGS-OMIT-$(notdir $<)),$(CFLAGS-$(notdir $(<D)))) \
+-	$(CFLAGS-$(subst $(top_srcdir),,$(dir $<))) \
++	$(CFLAGS-y-$(subst $(top_srcdir),,$(<D))) \
+ 	$(CFLAGS-$(notdir $<)) \
+ 	$(CFLAGS-$(notdir $@)) \
++    ) \
+ 	$(CFLAGS_gen.dep)
+ cmd_compile.i = $(cmd_compile.c:-c=-E -dD) $(UCLIBC_EXTRA_CPPFLAGS)
+ cmd_compile.s = $(cmd_compile.c:-c=-S)
+diff --git a/Rules.mak b/Rules.mak
+--- a/Rules.mak
++++ b/Rules.mak
+@@ -593,7 +593,7 @@ WARNING_FLAGS += \
+ 	-Wshadow \
+ 	-Wundef
+ # Works only w/ gcc-3.4 and up, can't be checked for gcc-3.x w/ check_gcc()
+-WARNING_FLAGS-gcc-4 += -Wdeclaration-after-statement
++#WARNING_FLAGS-gcc-4 += -Wdeclaration-after-statement
+ endif
+ WARNING_FLAGS += $(WARNING_FLAGS-gcc-$(GCC_MAJOR_VER))
+ $(foreach w,$(WARNING_FLAGS),$(eval $(call check-gcc-var,$(w))))
+@@ -696,10 +696,14 @@ ifneq ($(strip $(UCLIBC_EXTRA_LDFLAGS)),"")
+ LDFLAGS += $(call qstrip,$(UCLIBC_EXTRA_LDFLAGS))
+ endif
+ 
++ifeq ($(UCLIBC_HAS_STDIO_FUTEXES),y)
++CFLAGS += -D__USE_STDIO_FUTEXES__
++endif
++
+ ifeq ($(UCLIBC_HAS_THREADS),y)
+ ifeq ($(UCLIBC_HAS_THREADS_NATIVE),y)
+ 	PTNAME := nptl
+-	CFLAGS += -DHAVE_FORCED_UNWIND
++	CFLAGS += -DHAVE_FORCED_UNWIND -D_LIBC_REENTRANT
+ else
+ ifeq ($(LINUXTHREADS_OLD),y)
+ 	PTNAME := linuxthreads.old
+@@ -774,7 +778,7 @@ endif
+ ifeq ($(UCLIBC_BUILD_NOEXECSTACK),y)
+ $(eval $(call check-as-var,--noexecstack))
+ endif
+-ASFLAGS = $(ASFLAG_--noexecstack)
++ASFLAGS += $(ASFLAG_--noexecstack)
+ 
+ LIBGCC_CFLAGS ?= $(CFLAGS) $(CPU_CFLAGS-y)
+ $(eval $(call cache-output-var,LIBGCC,$(CC) $(LIBGCC_CFLAGS) -print-libgcc-file-name))
+diff --git a/ldso/ldso/Makefile.in b/ldso/ldso/Makefile.in
+--- a/ldso/ldso/Makefile.in
++++ b/ldso/ldso/Makefile.in
+@@ -7,28 +7,23 @@
+ 
+ subdirs += ldso/ldso/$(TARGET_ARCH)
+ 
+-CFLAGS-ldso := -DNOT_IN_libc -DIS_IN_rtld $(SSP_DISABLE_FLAGS)
++CFLAGS-rtld := -DNOT_IN_libc -DIS_IN_rtld $(SSP_DISABLE_FLAGS)
+ 
+ # This stuff will not work with -fomit-frame-pointer
+-CFLAGS-ldso += -fno-omit-frame-pointer
++CFLAGS-rtld += -fno-omit-frame-pointer
+ 
+-CFLAGS-ldso += -I$(top_srcdir)ldso/ldso/$(TARGET_ARCH) -I$(top_srcdir)ldso/include -I$(top_srcdir)ldso/ldso
+-CFLAGS-ldso += -DUCLIBC_RUNTIME_PREFIX=\"$(RUNTIME_PREFIX)\" -DUCLIBC_LDSO=\"$(UCLIBC_LDSO)\"
++CFLAGS-rtld += -I$(top_srcdir)ldso/ldso/$(TARGET_ARCH) -I$(top_srcdir)ldso/include -I$(top_srcdir)ldso/ldso
++CFLAGS-rtld += -DUCLIBC_RUNTIME_PREFIX=\"$(RUNTIME_PREFIX)\" -DUCLIBC_LDSO=\"$(UCLIBC_LDSO)\"
+ 
+-ifeq ($(DODEBUG),y)
+ # Not really much point in including debugging info, since gdb
+ # can't really debug ldso, since gdb requires help from ldso to
+ # debug things....
+ # On arm, gcc-4.3.x onwards -Os emits calls to libgcc, which calls _div0,
+ # which tries to call raise(). And raise comes from libc so a catch 22.
+ # Using -O2 instead. We could have use -fno-early-inlining with -Os too.
++CFLAGS-$(DODEBUG)-ldso/ldso := -O2 -g
+ 
+-CFLAGS-ldso += -O2 -g
+-endif
+-
+-CFLAGS-ldso/ldso/$(TARGET_ARCH)/ := $(CFLAGS-ldso)
+-
+-CFLAGS-ldso.c := -DLDSO_ELFINTERP=\"$(TARGET_ARCH)/elfinterp.c\" $(CFLAGS-ldso)
++CFLAGS-ldso.c := -DLDSO_ELFINTERP=\"$(TARGET_ARCH)/elfinterp.c\"
+ 
+ LDFLAGS-$(UCLIBC_FORMAT_DSBT_ELF)-$(UCLIBC_LDSO_NAME).so := -Wl,--dsbt-index=1
+ ifneq ($(SUPPORT_LD_DEBUG),y)
+diff --git a/ldso/libdl/Makefile.in b/ldso/libdl/Makefile.in
+--- a/ldso/libdl/Makefile.in
++++ b/ldso/libdl/Makefile.in
+@@ -13,9 +13,7 @@ CFLAGS-libdl += -I$(top_srcdir)ldso/ldso/$(TARGET_ARCH) -I$(top_srcdir)ldso/incl
+ 
+ CFLAGS-libdl += -DUCLIBC_RUNTIME_PREFIX=\"$(RUNTIME_PREFIX)\"
+ 
+-ifeq ($(SUPPORT_LD_DEBUG),y)
+-CFLAGS-libdl += -D__SUPPORT_LD_DEBUG__
+-endif
++CFLAGS-$(SUPPORT_LD_DEBUG)-ldso/libdl := -D__SUPPORT_LD_DEBUG__
+ 
+ CFLAGS-libdl.c := -DLDSO_ELFINTERP=\"$(TARGET_ARCH)/elfinterp.c\"
+ 
+diff --git a/libc/Makefile.in b/libc/Makefile.in
+--- a/libc/Makefile.in
++++ b/libc/Makefile.in
+@@ -15,11 +15,9 @@ ifneq ($(VERSION_SCRIPT),)
+ VERSION_SCRIPT := -Wl,--version-script,$(VERSION_SCRIPT)
+ endif
+ 
++CFLAGS-libc :=# intentionally left blank
+ LDFLAGS-$(UCLIBC_FORMAT_DSBT_ELF)-libc.so := -Wl,--dsbt-index=2
+ LDFLAGS-libc.so := $(LDFLAGS) $(VERSION_SCRIPT) -Wl,-init,$(SYMBOL_PREFIX)__uClibc_init
+-ifeq ($(UCLIBC_HAS_STDIO_FUTEXES),y)
+-CFLAGS += -D__USE_STDIO_FUTEXES__
+-endif
+ LIBS-libc.so := $(interp) $(ldso) $(top_builddir)lib/$(NONSHARED_LIBNAME)
+ 
+ # we have SHARED_LIBNAME=libc.so.$(ABI_VERSION) defined in Rules.mak
+diff --git a/libc/inet/Makefile.in b/libc/inet/Makefile.in
+--- a/libc/inet/Makefile.in
++++ b/libc/inet/Makefile.in
+@@ -12,7 +12,7 @@ include $(top_srcdir)libc/inet/rpc/Makefile.in
+ INET_DIR := $(top_srcdir)libc/inet
+ INET_OUT := $(top_builddir)libc/inet
+ 
+-CFLAGS-inet := -DRESOLVER="\"resolv.c\""
++CFLAGS-y-libc/inet := -DRESOLVER="\"resolv.c\""
+ CSRC-y :=
+ # des uses ntohl
+ CSRC-$(findstring y,$(UCLIBC_HAS_CRYPT_IMPL)$(UCLIBC_HAS_IPV4)$(UCLIBC_HAS_IPV6)) += ntohl.c
+diff --git a/libc/inet/rpc/Makefile.in b/libc/inet/rpc/Makefile.in
+--- a/libc/inet/rpc/Makefile.in
++++ b/libc/inet/rpc/Makefile.in
+@@ -7,7 +7,7 @@
+ 
+ subdirs += libc/inet/rpc
+ 
+-CFLAGS-rpc := -fno-strict-aliasing
++CFLAGS-y-libc/inet/rpc := -fno-strict-aliasing
+ 
+ ifneq ($(UCLIBC_HAS_FULL_RPC),y)
+ # For now, only compile the stuff needed to do an NFS mount....
+diff --git a/libc/sysdeps/linux/Makefile.commonarch b/libc/sysdeps/linux/Makefile.commonarch
+--- a/libc/sysdeps/linux/Makefile.commonarch
++++ b/libc/sysdeps/linux/Makefile.commonarch
+@@ -19,8 +19,16 @@ libc-y         += $(ARCH_OBJS)
+ libc-nomulti-y += $(ARCH_SOBJ)
+ objclean-y     += CLEAN_$(subst $(top_builddir),,$(ARCH_OUT))
+ 
+-CFLAGS-crti.S+=$(PICFLAG)
+-CFLAGS-crtn.S+=$(PICFLAG)
++CFLAGS-OMIT-crt1.S := -D_LIBC_REENTRANT
++CFLAGS-OMIT-crti.S := -D_LIBC_REENTRANT
++CFLAGS-OMIT-crtn.S := -D_LIBC_REENTRANT
++CFLAGS-OMIT-crtreloc.c := -D_LIBC_REENTRANT
++CFLAGS-crti.S += $(PICFLAG)
++CFLAGS-crtn.S += $(PICFLAG)
++# Due to a "bug" in make these order_only prereqs inherit per-target flags.
++# Attempt to workaround this inconvenient behaviour:
++CFLAGS-OMIT-crt1.S += $(CFLAGS-rtld) -DIN_LIB=%
++CFLAGS-OMIT-crtreloc.c += $(CFLAGS-rtld) -DIN_LIB=%
+ 
+ CLEAN_$(subst $(top_builddir),,$(ARCH_OUT)):
+ 	$(do_rm) $(addprefix $(ARCH_OUT)/*., o os oS) $(CTOR_TARGETS) $(CRTS)
+diff --git a/libc/sysdeps/linux/common/Makefile.in b/libc/sysdeps/linux/common/Makefile.in
+--- a/libc/sysdeps/linux/common/Makefile.in
++++ b/libc/sysdeps/linux/common/Makefile.in
+@@ -103,6 +103,8 @@ ifneq ($(strip $(ARCH_OBJS)),)
+ CSRC-y := $(filter-out $(notdir $(ARCH_OBJS:.o=.c)) $(ARCH_OBJ_FILTEROUT),$(CSRC-y))
+ endif
+ 
++CFLAGS-OMIT-ssp.c := $(CFLAG_-fstack-protector) $(CFLAG_-fstack-protector-all) $(CFLAG_-fstack-protector-strong)
++CFLAGS-OMIT-ssp-local.c := $(CFLAG_-fstack-protector) $(CFLAG_-fstack-protector-all) $(CFLAG_-fstack-protector-strong)
+ CFLAGS-ssp.c := $(SSP_DISABLE_FLAGS)
+ CFLAGS-ssp-local.c := $(SSP_DISABLE_FLAGS)
+ 
+diff --git a/libc/sysdeps/linux/x86_64/crt1.S b/libc/sysdeps/linux/x86_64/crt1.S
+--- a/libc/sysdeps/linux/x86_64/crt1.S
++++ b/libc/sysdeps/linux/x86_64/crt1.S
+@@ -55,7 +55,9 @@
+ 		...
+ 					NULL
+ */
+-
++#if defined NOT_IN_libc
++# error error in build framework
++#endif
+ #include <features.h>
+ 
+ .text
+diff --git a/libm/Makefile.in b/libm/Makefile.in
+--- a/libm/Makefile.in
++++ b/libm/Makefile.in
+@@ -220,8 +220,6 @@ endif
+ ifeq ($(UCLIBC_HAS_FPU),y)
+ ifeq ($(DO_C99_MATH),y)
+ ifneq ($(strip $(libm_ARCH_OBJS)),)
+-CFLAGS-libm/$(TARGET_ARCH)/ := $(CFLAGS-libm)
+-CFLAGS-libm/$(TARGET_ARCH)/$(TARGET_SUBARCH)/ := $(CFLAGS-libm)
+ 
+ # remove generic sources, if arch specific version is present
+ ifneq ($(strip $(libm_ARCH_SRC)),)
+diff --git a/libm/powerpc/e500/fpu/Makefile.arch b/libm/powerpc/e500/fpu/Makefile.arch
+--- a/libm/powerpc/e500/fpu/Makefile.arch
++++ b/libm/powerpc/e500/fpu/Makefile.arch
+@@ -11,8 +11,6 @@ libm_ARCH_SRC:=$(wildcard $(libm_ARCH_fpu_DIR)/*.c)
+ libm_ARCH_OBJ:=$(patsubst $(libm_ARCH_fpu_DIR)/%.c,$(libm_ARCH_fpu_OUT)/%.o,$(libm_ARCH_SRC))
+ endif
+ 
+-CFLAGS-libm/$(TARGET_ARCH)/$(TARGET_SUBARCH)/fpu/ := $(CFLAGS-libm)
+-
+ libm_ARCH_OBJS:=$(libm_ARCH_OBJ)
+ 
+ ifeq ($(DOPIC),y)
+diff --git a/libpthread/linuxthreads/Makefile.in b/libpthread/linuxthreads/Makefile.in
+--- a/libpthread/linuxthreads/Makefile.in
++++ b/libpthread/linuxthreads/Makefile.in
+@@ -11,11 +11,7 @@ subdirs += libpthread/linuxthreads/sysdeps/unix/sysv/linux
+ subdirs += libpthread/linuxthreads/sysdeps/pthread
+ 
+ CFLAGS-dir_linuxthreads := -DNOT_IN_libc -DIS_IN_libpthread
+-CFLAGS-linuxthreads := $(CFLAGS-dir_linuxthreads) $(SSP_ALL_CFLAGS)
+-
+-CFLAGS-libpthread/linuxthreads/sysdeps/$(TARGET_ARCH)/ := $(CFLAGS-linuxthreads)
+-CFLAGS-libpthread/linuxthreads/sysdeps/unix/sysv/linux/ := $(CFLAGS-linuxthreads)
+-CFLAGS-libpthread/linuxthreads/sysdeps/pthread/         := $(CFLAGS-linuxthreads)
++CFLAGS-libpthread/linuxthreads := $(CFLAGS-dir_linuxthreads) $(SSP_ALL_CFLAGS)
+ 
+ # This stuff will not compile without at least -O1
+ # psm: can't handle this here, could maybe search for -O0 in CFLAGS
+diff --git a/libpthread/linuxthreads.old/Makefile.in b/libpthread/linuxthreads.old/Makefile.in
+--- a/libpthread/linuxthreads.old/Makefile.in
++++ b/libpthread/linuxthreads.old/Makefile.in
+@@ -9,9 +9,7 @@
+ subdirs += libpthread/linuxthreads.old
+ 
+ CFLAGS-dir_linuxthreads.old := -DNOT_IN_libc -DIS_IN_libpthread
+-CFLAGS-linuxthreads.old := $(CFLAGS-dir_linuxthreads.old) $(SSP_ALL_CFLAGS)
+-
+-CFLAGS-libpthread/linuxthreads.old/sysdeps/$(TARGET_ARCH)/ := $(CFLAGS-linuxthreads.old)
++CFLAGS-libpthread/linuxthreads.old := $(CFLAGS-dir_linuxthreads.old) $(SSP_ALL_CFLAGS)
+ 
+ ifeq ($(PTHREADS_DEBUG_SUPPORT),y)
+ LDFLAGS-libpthread.so := $(LDFLAGS_NOSTRIP) -Wl,-z,defs
+diff --git a/libpthread/linuxthreads.old_db/Makefile.in b/libpthread/linuxthreads.old_db/Makefile.in
+--- a/libpthread/linuxthreads.old_db/Makefile.in
++++ b/libpthread/linuxthreads.old_db/Makefile.in
+@@ -8,7 +8,7 @@
+ subdirs += libpthread/linuxthreads.old_db
+ 
+ # Get the thread include dependencies and shared object name
+-CFLAGS-linuxthreads.old_db := -DNOT_IN_libc -DLIBPTHREAD_SO="\"libpthread.so.$(ABI_VERSION)\""
++CFLAGS-libpthread/linuxthreads.old_db := -DNOT_IN_libc -DLIBPTHREAD_SO="\"libpthread.so.$(ABI_VERSION)\""
+ 
+ LDFLAGS-libthread_db.so := $(LDFLAGS_NOSTRIP) $(if $(call check_ld,--warn-unresolved-symbols),-Wl$(comma)--warn-unresolved-symbols)
+ ifeq ($(DOSTRIP),y)
+diff --git a/libpthread/linuxthreads_db/Makefile.in b/libpthread/linuxthreads_db/Makefile.in
+--- a/libpthread/linuxthreads_db/Makefile.in
++++ b/libpthread/linuxthreads_db/Makefile.in
+@@ -8,7 +8,7 @@
+ subdirs += libpthread/linuxthreads_db
+ 
+ # Get the thread include dependencies and shared object name
+-CFLAGS-linuxthreads_db := -DNOT_IN_libc -DLIBPTHREAD_SO="\"libpthread.so.$(ABI_VERSION)\""
++CFLAGS-libpthread/linuxthreads_db := -DNOT_IN_libc -DLIBPTHREAD_SO="\"libpthread.so.$(ABI_VERSION)\""
+ 
+ LDFLAGS-libthread_db.so := $(LDFLAGS_NOSTRIP) $(if $(call check_ld,--warn-unresolved-symbols),-Wl$(comma)--warn-unresolved-symbols)
+ ifeq ($(DOSTRIP),y)
+diff --git a/libpthread/nptl/Makefile.in b/libpthread/nptl/Makefile.in
+--- a/libpthread/nptl/Makefile.in
++++ b/libpthread/nptl/Makefile.in
+@@ -141,7 +141,8 @@ LDFLAGS-libpthread.so += $(top_builddir)lib/$(UCLIBC_LDSO_NAME)-$(VERSION).so $(
+ 
+ LIBS-libpthread.so := $(LIBS)
+ 
+-CFLAGS-nptl = -DNOT_IN_libc -DIS_IN_libpthread $(SSP_ALL_CFLAGS)
++CFLAGS-dir_nptl := -DNOT_IN_libc -DIS_IN_libpthread
++CFLAGS-libpthread/nptl := $(CFLAGS-dir_nptl) $(SSP_ALL_CFLAGS)
+ 
+ # Since cancellation handling is in large parts handled using exceptions
+ # we have to compile some files with exception handling enabled, some
+@@ -212,7 +213,7 @@ CFLAGS-pthread_barrierattr_getpshared.c = -D_GNU_SOURCE
+ CFLAGS-pthread_barrierattr_setpshared.c = -D_GNU_SOURCE
+ CFLAGS-sem_open.c = -D_GNU_SOURCE
+ 
+-CFLAGS-OMIT-alloca_cutoff.c = $(CFLAGS-nptl)
+-CFLAGS-OMIT-forward.c = $(CFLAGS-nptl)
+-CFLAGS-OMIT-libc-lowlevelock.c = $(CFLAGS-nptl)
+-CFLAGS-OMIT-libc-cancellation.c = $(CFLAGS-nptl)
++CFLAGS-OMIT-alloca_cutoff.c = $(CFLAGS-dir_nptl)
++CFLAGS-OMIT-forward.c = $(CFLAGS-dir_nptl)
++CFLAGS-OMIT-libc-lowlevelock.c = $(CFLAGS-dir_nptl)
++CFLAGS-OMIT-libc-cancellation.c = $(CFLAGS-dir_nptl)
+diff --git a/libpthread/nptl/sysdeps/pthread/Makefile.in b/libpthread/nptl/sysdeps/pthread/Makefile.in
+--- a/libpthread/nptl/sysdeps/pthread/Makefile.in
++++ b/libpthread/nptl/sysdeps/pthread/Makefile.in
+@@ -35,7 +35,7 @@ libpthread_pthread_CSRC = \
+ 	pt-longjmp.c \
+ 	pt-sigaction.c \
+ 	tpp.c
+-CFLAGS-pthread = $(SSP_ALL_CFLAGS) -DNOT_IN_libc -DIS_IN_libpthread
++
+ CFLAGS-pthread_barrier_wait.c = -D_GNU_SOURCE
+ CFLAGS-pthread_spin_destroy.c = -D_GNU_SOURCE
+ CFLAGS-pthread_spin_init.c = -D_GNU_SOURCE
+@@ -56,7 +56,7 @@ librt-pt-routines-y = librt-cancellation.c
+ librt-pt-shared-only-routines-y = rt-unwind-resume.c
+ 
+ ifeq ($(UCLIBC_CTOR_DTOR),y)
+-CFLAGS-OMIT-pt-initfini.c = $(CFLAGS-pthread)
++CFLAGS-OMIT-pt-initfini.c = $(CFLAGS-y-libpthread/nptl/sysdeps/pthread)
+ CFLAGS-pt-initfini.c = -S -g0 $(PICFLAG) -fno-inline-functions	\
+ 			$(call check_gcc,-fno-unit-at-a-time,)	\
+ 			$(SSP_DISABLE_FLAGS) \
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/Makefile.commonarch b/libpthread/nptl/sysdeps/unix/sysv/linux/Makefile.commonarch
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/Makefile.commonarch
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/Makefile.commonarch
+@@ -132,8 +132,6 @@ ifneq ($(UCLIBC_HAS_BACKTRACE),)
+ CFLAGS-raise.c = -fasynchronous-unwind-tables
+ endif
+ 
+-CFLAGS-linux = -DNOT_IN_libc -DIS_IN_libpthread $(SSP_ALL_CFLAGS)
+-
+ CFLAGS-OMIT-libc_pthread_init.c = -DNOT_IN_libc -DIS_IN_libpthread
+ CFLAGS-OMIT-libc_multiple_threads.c = -DNOT_IN_libc -DIS_IN_libpthread
+ CFLAGS-OMIT-register-atfork.c = -DNOT_IN_libc -DIS_IN_libpthread
+@@ -157,12 +155,6 @@ CFLAGS-OMIT-timer_gettime.c = -DIS_IN_libpthread
+ CFLAGS-OMIT-timer_routines.c = -DIS_IN_libpthread
+ CFLAGS-OMIT-timer_settime.c = -DIS_IN_libpthread
+ 
+-ASFLAGS-open.S = -D_LIBC_REENTRANT
+-ASFLAGS-close.S = -D_LIBC_REENTRANT
+-ASFLAGS-read.S = -D_LIBC_REENTRANT
+-ASFLAGS-write.S = -D_LIBC_REENTRANT
+-ASFLAGS-waitpid.S = -D_LIBC_REENTRANT
+-
+ PTHREAD_LINUX_SYM   := $(notdir $(wildcard $(libpthread_linux_DIR)/*.sym))
+ PTHREAD_LINUX_SYM_H := $(addprefix $(libpthread_linux_OUT)/,$(PTHREAD_LINUX_SYM:.sym=.h))
+ 
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/i386/Makefile.arch b/libpthread/nptl/sysdeps/unix/sysv/linux/i386/Makefile.arch
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/i386/Makefile.arch
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/i386/Makefile.arch
+@@ -14,15 +14,12 @@ libc_linux_arch_SSRC = clone.S vfork.S
+ ASFLAGS += -DUSE___THREAD
+ 
+ CFLAGS-pt-__syscall_error.c =  -DNOT_IN_libc -DIS_IN_libpthread
+-ASFLAGS-pt-vfork.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
+-ASFLAGS-lowlevellock.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
+-ASFLAGS-lowlevelrobustlock.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
+-ASFLAGS-pthread_once.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
+-ASFLAGS-pthread_spin_unlock.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
++ASFLAGS-pt-vfork.S = -DNOT_IN_libc -DIS_IN_libpthread
++ASFLAGS-lowlevellock.S = -DNOT_IN_libc -DIS_IN_libpthread
++ASFLAGS-lowlevelrobustlock.S = -DNOT_IN_libc -DIS_IN_libpthread
++ASFLAGS-pthread_once.S = -DNOT_IN_libc -DIS_IN_libpthread
++ASFLAGS-pthread_spin_unlock.S = -DNOT_IN_libc -DIS_IN_libpthread
+ 
+-ASFLAGS-clone.S = -D_LIBC_REENTRANT
+-ASFLAGS-vfork.S = -D_LIBC_REENTRANT
+-ASFLAGS-libc-lowlevellock.S = -D_LIBC_REENTRANT
+ ifeq ($(UCLIBC_HAS_STDIO_FUTEXES),y)
+ CFLAGS-fork.c = -D__USE_STDIO_FUTEXES__
+ endif
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/mips/Makefile.arch b/libpthread/nptl/sysdeps/unix/sysv/linux/mips/Makefile.arch
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/mips/Makefile.arch
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/mips/Makefile.arch
+@@ -23,5 +23,3 @@ CFLAGS-pthread_once.c = -DNOT_IN_libc -DIS_IN_libpthread
+ CFLAGS-pt-__syscall_rt_sigaction.c = -DNOT_IN_libc -DIS_IN_libpthread
+ ASFLAGS-pt-vfork.S = -DNOT_IN_libc -DIS_IN_libpthread
+ 
+-ASFLAGS-clone.S = -D_LIBC_REENTRANT
+-ASFLAGS-vfork.S = -D_LIBC_REENTRANT
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/powerpc/Makefile.arch b/libpthread/nptl/sysdeps/unix/sysv/linux/powerpc/Makefile.arch
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/powerpc/Makefile.arch
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/powerpc/Makefile.arch
+@@ -19,12 +19,9 @@ ASFLAGS += -DUSE___THREAD
+ CFLAGS-pthread_once.c = -DNOT_IN_libc -DIS_IN_libpthread
+ CFLAGS-lowlevellock.c = -DNOT_IN_libc -DIS_IN_libpthread
+ CFLAGS-pt-__syscall_error.c =  -DNOT_IN_libc -DIS_IN_libpthread
+-ASFLAGS-pt-vfork.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
+-#ASFLAGS-lowlevellock.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
++ASFLAGS-pt-vfork.S = -DNOT_IN_libc -DIS_IN_libpthread
++#ASFLAGS-lowlevellock.S = -DNOT_IN_libc -DIS_IN_libpthread
+ 
+-#ASFLAGS-libc-lowlevellock.S = -D_LIBC_REENTRANT
+-ASFLAGS-clone.S = -D_LIBC_REENTRANT
+-ASFLAGS-vfork.S = -D_LIBC_REENTRANT
+ ifeq ($(UCLIBC_HAS_STDIO_FUTEXES),y)
+ CFLAGS-fork.c = -D__USE_STDIO_FUTEXES__
+ endif
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/sh/Makefile.arch b/libpthread/nptl/sysdeps/unix/sysv/linux/sh/Makefile.arch
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/sh/Makefile.arch
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/sh/Makefile.arch
+@@ -17,30 +17,12 @@ libc_linux_arch_SSRC = libc-lowlevellock.S clone.S vfork.S
+ 
+ ASFLAGS += -DUSE___THREAD
+ 
+-ASFLAGS-pt-vfork.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
+-ASFLAGS-pthread_once.S = -D_LIBC_REENTRANT
+-ASFLAGS-pthread_rwlock_wrlock.S = -D_LIBC_REENTRANT
+-ASFLAGS-pthread_rwlock_rdlock.S = -D_LIBC_REENTRANT
+-ASFLAGS-pthread_rwlock_unlock.S = -D_LIBC_REENTRANT
+-ASFLAGS-pthread_barrier_wait.S = -D_LIBC_REENTRANT
+-ASFLAGS-pthread_cond_broadcast.S = -D_LIBC_REENTRANT
+-ASFLAGS-pthread_cond_signal.S = -D_LIBC_REENTRANT
+-ASFLAGS-pthread_cond_wait.S = -D_LIBC_REENTRANT
+-ASFLAGS-pthread_cond_timedwait.S = -D_LIBC_REENTRANT
+-ASFLAGS-pthread_rwlock_timedwrlock.S = -D_LIBC_REENTRANT
+-ASFLAGS-pthread_rwlock_timedrdlock.S = -D_LIBC_REENTRANT
+-ASFLAGS-sem_post.S = -D_LIBC_REENTRANT
+-ASFLAGS-sem_timedwait.S = -D_LIBC_REENTRANT
+-ASFLAGS-sem_trywait.S = -D_LIBC_REENTRANT
+-ASFLAGS-sem_wait.S = -D_LIBC_REENTRANT
++ASFLAGS-pt-vfork.S = -DNOT_IN_libc -DIS_IN_libpthread
+ 
+-ASFLAGS-libc-lowlevellock.S = -D_LIBC_REENTRANT 
+ 
+-ASFLAGS-lowlevellock.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
+-ASFLAGS-lowlevelrobustlock.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
++ASFLAGS-lowlevellock.S = -DNOT_IN_libc -DIS_IN_libpthread
++ASFLAGS-lowlevelrobustlock.S = -DNOT_IN_libc -DIS_IN_libpthread
+ 
+-ASFLAGS-clone.S = -D_LIBC_REENTRANT
+-ASFLAGS-vfork.S = -D_LIBC_REENTRANT
+ ifeq ($(UCLIBC_HAS_STDIO_FUTEXES),y)
+ CFLAGS-fork.c = -D__USE_STDIO_FUTEXES__
+ endif
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/sparc/Makefile.arch b/libpthread/nptl/sysdeps/unix/sysv/linux/sparc/Makefile.arch
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/sparc/Makefile.arch
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/sparc/Makefile.arch
+@@ -17,13 +17,11 @@ librt_linux_arch_CSRC = pt-__syscall_error.c
+ 
+ ASFLAGS += -DUSE___THREAD
+ 
+-ASFLAGS-pt-vfork.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
++ASFLAGS-pt-vfork.S = -DNOT_IN_libc -DIS_IN_libpthread
+ CFLAGS-pthread_once.c = -DNOT_IN_libc -DIS_IN_libpthread
+ CFLAGS-lowlevellock.c = -DNOT_IN_libc -DIS_IN_libpthread
+ CFLAGS-pt-__syscall_error.c =  -DNOT_IN_libc -DIS_IN_libpthread
+ 
+-ASFLAGS-clone.S = -D_LIBC_REENTRANT
+-ASFLAGS-vfork.S = -D_LIBC_REENTRANT
+ ifeq ($(UCLIBC_HAS_STDIO_FUTEXES),y)
+ CFLAGS-fork.c = -D__USE_STDIO_FUTEXES__
+ endif
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/x86_64/Makefile.arch b/libpthread/nptl/sysdeps/unix/sysv/linux/x86_64/Makefile.arch
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/x86_64/Makefile.arch
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/x86_64/Makefile.arch
+@@ -21,17 +21,11 @@ librt_linux_arch_SSRC = librt-cancellation.S
+ ASFLAGS += -DUSE___THREAD
+ 
+ CFLAGS-pt-__syscall_error.c =  -DNOT_IN_libc -DIS_IN_libpthread
+-ASFLAGS-pt-vfork.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
+-ASFLAGS-lowlevellock.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
+-ASFLAGS-pthread_once.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
+-ASFLAGS-cancellation.S = -DNOT_IN_libc -DIS_IN_libpthread -D_LIBC_REENTRANT
+-ASFLAGS-pthread_cond_timedwait.S = -D_LIBC_REENTRANT
+-ASFLAGS-pthread_cond_wait.S = -D_LIBC_REENTRANT
++ASFLAGS-pt-vfork.S = -DNOT_IN_libc -DIS_IN_libpthread
++ASFLAGS-lowlevellock.S = -DNOT_IN_libc -DIS_IN_libpthread
++ASFLAGS-pthread_once.S = -DNOT_IN_libc -DIS_IN_libpthread
++ASFLAGS-cancellation.S = -DNOT_IN_libc -DIS_IN_libpthread
+ 
+-ASFLAGS-clone.S = -D_LIBC_REENTRANT
+-ASFLAGS-vfork.S = -D_LIBC_REENTRANT
+-ASFLAGS-libc-lowlevellock.S = -D_LIBC_REENTRANT
+-ASFLAGS-libc-cancellation.S = -D_LIBC_REENTRANT
+ ifeq ($(UCLIBC_HAS_STDIO_FUTEXES),y)
+ CFLAGS-fork.c = -D__USE_STDIO_FUTEXES__
+ endif
+diff --git a/libpthread/nptl_db/Makefile.in b/libpthread/nptl_db/Makefile.in
+--- a/libpthread/nptl_db/Makefile.in
++++ b/libpthread/nptl_db/Makefile.in
+@@ -8,9 +8,11 @@
+ subdirs += libpthread/nptl_db
+ 
+ # Get the thread include dependencies and shared object name
+-CFLAGS-nptl_db := -DLIBPTHREAD_SO="\"libpthread.so.$(ABI_VERSION)\""
+-CFLAGS-nptl_db += -I$(top_srcdir)libpthread/nptl -D_GNU_SOURCE
+-CFLAGS-nptl_db += -DIS_IN_libthread_db=1 -DNOT_IN_libc -std=gnu99 -I$(top_srcdir)ldso/include
++CFLAGS-libpthread/nptl_db := -DNOT_IN_libc \
++	-DLIBPTHREAD_SO="\"libpthread.so.$(ABI_VERSION)\"" \
++	-std=gnu99 -D_GNU_SOURCE \
++	-I$(top_srcdir)libpthread/nptl \
++	-I$(top_srcdir)ldso/include
+ 
+ LDFLAGS-libthread_db.so := $(LDFLAGS_NOSTRIP) $(if $(call check_ld,--warn-unresolved-symbols),-Wl$(comma)--warn-unresolved-symbols)
+ LIBS-libthread_db.so := $(LIBS)
+diff --git a/libubacktrace/Makefile.in b/libubacktrace/Makefile.in
+--- a/libubacktrace/Makefile.in
++++ b/libubacktrace/Makefile.in
+@@ -35,11 +35,6 @@ endif
+ # -fasynchronous-unwind-tables is required for backtrace to work using dwarf2
+ CFLAGS-backtrace.c := -fasynchronous-unwind-tables
+ 
+-# pass common flags to arch dirs
+-ifneq ($(strip $(libubacktrace_ARCH_OBJS)),)
+-CFLAGS-libubacktrace/$(TARGET_ARCH)/ := $(CFLAGS-libubacktrace)
+-endif
+-
+ libubacktrace_SRCS := $(patsubst %.c,$(libubacktrace_DIR)/%.c,$(libubacktrace_SRC-y))
+ libubacktrace_OBJS := $(patsubst $(libubacktrace_DIR)/%.c,$(libubacktrace_OUT)/%.o,$(libubacktrace_SRCS))
+ 
+-- 
