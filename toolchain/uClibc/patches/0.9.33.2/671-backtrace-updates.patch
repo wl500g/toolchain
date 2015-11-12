@@ -1,0 +1,68 @@
+libubacktrace: Upstream fixes
+
+ 11d8a813 libubacktrace: arm: Fix typo in assert
+ 0007638b libubacktrace: use libgcc_s.h
+
+---
+
+diff --git a/libubacktrace/arm/backtrace.c b/libubacktrace/arm/backtrace.c
+--- a/libubacktrace/arm/backtrace.c
++++ b/libubacktrace/arm/backtrace.c
+@@ -12,6 +12,7 @@
+  *
+  */
+ 
++#include <libgcc_s.h>
+ #include <execinfo.h>
+ #include <dlfcn.h>
+ #include <stdlib.h>
+@@ -34,11 +35,11 @@ static _Unwind_VRS_Result (*unwind_vrs_get) (_Unwind_Context *,
+ 
+ static void backtrace_init (void)
+ {
+-	void *handle = dlopen ("libgcc_s.so.1", RTLD_LAZY);
++	void *handle = dlopen (LIBGCC_S_SO, RTLD_LAZY);
+ 	if (handle == NULL
+ 		|| ((unwind_backtrace = dlsym (handle, "_Unwind_Backtrace")) == NULL)
+ 		|| ((unwind_vrs_get = dlsym (handle, "_Unwind_VRS_Get")) == NULL)) {
+-		printf("libgcc_s.so.1 must be installed for backtrace to work\n");
++		printf(LIBGCC_S_SO " must be installed for backtrace to work\n");
+ 		abort();
+ 	}
+ }
+@@ -62,7 +62,7 @@ backtrace_helper (struct _Unwind_Context *ctx, void *a)
+ {
+ 	struct trace_arg *arg = a;
+ 
+-	assert (unwind_getip != NULL);
++	assert (unwind_getip(ctx) != NULL);
+ 
+ 	/* We are first called with address in the __backtrace function. Skip it. */
+ 	if (arg->cnt != -1)
+diff --git a/libubacktrace/backtrace.c b/libubacktrace/backtrace.c
+--- a/libubacktrace/backtrace.c
++++ b/libubacktrace/backtrace.c
+@@ -20,6 +20,7 @@
+  *
+  */
+ 
++#include <libgcc_s.h>
+ #include <execinfo.h>
+ #include <dlfcn.h>
+ #include <stdlib.h>
+@@ -38,12 +39,12 @@ static _Unwind_Ptr (*unwind_getip) (struct _Unwind_Context *);
+ 
+ static void backtrace_init (void)
+ {
+-	void *handle = dlopen ("libgcc_s.so.1", RTLD_LAZY);
++	void *handle = dlopen (LIBGCC_S_SO, RTLD_LAZY);
+ 
+ 	if (handle == NULL
+ 		|| ((unwind_backtrace = dlsym (handle, "_Unwind_Backtrace")) == NULL)
+ 		|| ((unwind_getip = dlsym (handle, "_Unwind_GetIP")) == NULL)) {
+-		printf("libgcc_s.so.1 must be installed for backtrace to work\n");
++		printf(LIBGCC_S_SO " must be installed for backtrace to work\n");
+ 		abort();
+ 	}
+ }
+-- 
