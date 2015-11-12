@@ -5,6 +5,7 @@ buildsys: Upstream fixes
  143b7505 nptl: rephrase *.sym handling
  3010966c buildsys: swap V=1 with V=2 command printing
  a58f1e2a buildsys: remove some obsolete optimization CFLAGS
+ 561ce7fb buildsys: prune pthread bits from arch headers
 
 ---
 
@@ -34,6 +35,17 @@ diff --git a/Makefile.in b/Makefile.in
  libs: pregen
  
  # In this section, we need .config
+@@ -92,6 +92,10 @@ HEADERS_BITS_SUBARCH :=
+ ifneq ($(TARGET_SUBARCH),)
+ HEADERS_BITS_SUBARCH := $(notdir $(wildcard $(top_srcdir)libc/sysdeps/linux/$(TARGET_ARCH)/bits/$(TARGET_SUBARCH)/*.h))
+ endif
++ifneq ($(HEADERS_BITS_PTHREAD),)
++HEADERS_BITS_ARCH   := $(filter-out $(HEADERS_BITS_PTHREAD),$(HEADERS_BITS_ARCH))
++HEADERS_BITS_SUBARCH:= $(filter-out $(HEADERS_BITS_PTHREAD),$(HEADERS_BITS_SUBARCH))
++endif
+ HEADERS_BITS_COMMON := $(filter-out $(HEADERS_BITS_ARCH) $(HEADERS_BITS_SUBARCH) $(HEADERS_BITS_PTHREAD),$(HEADERS_BITS_COMMON))
+ 
+ HEADERS_SYS_COMMON := $(notdir $(wildcard $(top_srcdir)libc/sysdeps/linux/common/sys/*.h))
 @@ -219,8 +219,6 @@ install: install_runtime install_dev
  
  RUNTIME_PREFIX_LIB_FROM_DEVEL_PREFIX_LIB=$(shell $(top_srcdir)extra/scripts/relative_path.sh $(DEVEL_PREFIX)$(MULTILIB_DIR) $(RUNTIME_PREFIX)$(MULTILIB_DIR))
