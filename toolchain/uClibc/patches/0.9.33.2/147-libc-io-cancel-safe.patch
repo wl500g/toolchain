@@ -12,6 +12,8 @@ the pthread_mutex counterpart.
 
 [ stlinux.com commit 414a400292 ]
 
+Trivial modifications to hide new symbol by Leonid Lisovskiy.
+
 ---
  libc/stdio/Makefile.in                            |    3 ++
  libc/stdio/io_lock_unlock.c                       |   16 ++++++++++++++
@@ -50,7 +52,7 @@ new file mode 100644
 +
 +/* Function wrapper needed for I/O locking macros. */
 +
-+void IO_lock_unlock (_IO_lock_t *lock)
++void attribute_hidden __IO_lock_unlock (_IO_lock_t *lock)
 +{
 +  _IO_lock_unlock (*lock);
 +}
@@ -79,7 +81,7 @@ diff --git a/libc/sysdeps/linux/common/bits/uClibc_mutex.h b/libc/sysdeps/linux/
 +		int __infunc_need_locking = (C);					\
 +		if (__infunc_need_locking) {						\
 +			_pthread_cleanup_push_defer(&__infunc_pthread_cleanup_buffer,	\
-+						    (void (*) (void *))IO_lock_unlock,	\
++						    (void (*) (void *))__IO_lock_unlock,	\
 +						    &(M));				\
 +			_IO_lock_lock((M));						\
 +		}									\
@@ -102,7 +104,7 @@ diff --git a/libpthread/nptl/sysdeps/pthread/bits/stdio-lock.h b/libpthread/nptl
  
  typedef struct { int lock; int cnt; void *owner; } _IO_lock_t;
  
-+void IO_lock_unlock (_IO_lock_t *lock);
++void __IO_lock_unlock (_IO_lock_t *lock) attribute_hidden;
 +
  #define _IO_lock_initializer { LLL_LOCK_INITIALIZER, 0, NULL }
  
