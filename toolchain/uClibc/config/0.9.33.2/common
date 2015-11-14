@@ -15,7 +15,7 @@ DEVEL_PREFIX="/usr/"
 # DODEBUG_PT is not set
 # DOMULTI is not set
 DOPIC=y
-DOSTRIP=y
+# DOSTRIP is not set
 DO_C99_MATH=y
 # DO_XSI_MATH is not set
 # EXTRA_WARNINGS is not set
