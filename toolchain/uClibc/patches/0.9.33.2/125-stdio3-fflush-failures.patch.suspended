@@ -1,0 +1,63 @@
+fclose and fflush do not report write failures
+
+Refs.:
+ http://bugs.busybox.net/show_bug.cgi?id=5156
+ http://lists.uclibc.org/pipermail/uclibc/2013-February/047524.html
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+---
+
+--- a/libc/stdio/_wcommit.c
++++ b/libc/stdio/_wcommit.c
+@@ -23,6 +23,8 @@ size_t attribute_hidden __stdio_wcommit(
+ 	if ((bufsize = __STDIO_STREAM_BUFFER_WUSED(stream)) != 0) {
+ 		stream->__bufpos = stream->__bufstart;
+ 		__stdio_WRITE(stream, stream->__bufstart, bufsize);
++		if (stream->__modeflags & __FLAG_ERROR)
++			return bufsize;
+ 	}
+ 
+ 	return __STDIO_STREAM_BUFFER_WUSED(stream);
+--- /dev/null
++++ b/test/stdio/fflush-return.c
+@@ -0,0 +1,39 @@
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++static int
++do_test (void)
++{
++  FILE *f;
++  int x, y;
++
++  f = fopen ("/dev/full", "w");
++  if (f == NULL) {
++    puts ("fopen failed");
++    exit (1);
++  }
++  x = fputc ('X', f);
++  /* man 3 fflush
++   *  ...
++   * RETURN VALUE
++       Upon successful completion 0 is returned.  Otherwise, EOF  is  returned
++       and errno is set to indicate the error.
++   */
++  y = fflush (f);
++  if (x != EOF && y != EOF) {
++    printf ("fflush wrong retcode (%d)\n", y);
++    exit (1);
++  }
++  x = fputc ('X', f);
++  y = fclose (f);
++  if (x != EOF && y != EOF) {
++    printf ("fclose wrong retcode (%d)\n", y);
++    exit (1);
++  }
++
++  return 0;
++}
++
++#define TEST_FUNCTION do_test ()
++#include "../test-skeleton.c"
+-- 
