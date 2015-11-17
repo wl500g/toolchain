@@ -1,5 +1,13 @@
 test: Isolate from host standart libraries if TEST_INSTALLED_UCLIBC not set
 
+Additionally, provide:
+1. Ability to suppress ld flag -z,now for shared libraries by define 
+ <target>.so_no-z-now := yes
+
+2. Allow to build separate glibc shared objects(*.so.glibc).
+ Pass -D_GLIBC_TEST compiler flag for host builds, define _SO_EXT for use
+ in application code in testsuite.h
+
 
 Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
 
@@ -41,7 +49,7 @@ diff --git a/test/Rules.mak b/test/Rules.mak
 diff --git a/test/Test.mak b/test/Test.mak
 --- a/test/Test.mak
 +++ b/test/Test.mak
-@@ -101,7 +102,7 @@ $(MAKE_SRCS): Makefile $(TESTDIR)Makefile $(TESTDIR)Rules.mak $(TESTDIR)Test.mak
+@@ -102,11 +102,11 @@ $(MAKE_SRCS): Makefile $(TESTDIR)Makefile $(TESTDIR)Rules.mak $(TESTDIR)Test.mak
  $(U_TARGETS): $(U_TARGET_SRCS) $(MAKE_SRCS)
  	$(showlink)
  	$(Q)$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$(notdir $(CURDIR))) $(CFLAGS_$@) -c $@.c -o $@.o
@@ -50,3 +58,46 @@ diff --git a/test/Test.mak b/test/Test.mak
  
  $(G_TARGETS): $(U_TARGET_SRCS) $(MAKE_SRCS)
  	$(showlink)
+-	$(Q)$(HOSTCC) $(HOST_CFLAGS) $(CFLAGS_$(notdir $(CURDIR))) $(CFLAGS_$(patsubst %_glibc,%,$@)) -c $(patsubst %_glibc,%,$@).c -o $@.o
++	$(Q)$(HOSTCC) $(HOST_CFLAGS) -D_GLIBC_TEST $(CFLAGS_$(notdir $(CURDIR))) $(CFLAGS_$(patsubst %_glibc,%,$@)) -c $(patsubst %_glibc,%,$@).c -o $@.o
+ 	$(Q)$(HOSTCC) $(HOST_LDFLAGS) $@.o -o $@ $(EXTRA_LDFLAGS) $(LDFLAGS_$(patsubst %_glibc,%,$@))
+ 
+ 
+@@ -121,11 +121,20 @@ %.so: %.c
+ 	$(Q)$(CC) \
+ 		$(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$(patsubst %_glibc,%,$@)) \
+ 		-fPIC -shared $< -o $@ -Wl,-soname,$@ \
+-		$(LDFLAGS) $(EXTRA_LIBS) $(LDFLAGS_$(patsubst %_glibc,%,$@))
++		$(if $($(@F)_no-z-now),$(filter-out -Wl$(comma)-z$(comma)now,$(LDFLAGS)),$(LDFLAGS)) \
++		$(LDFLAGS_$(patsubst %_glibc,%,$@)) $(EXTRA_LIBS) -lc
++
++%.so.glibc: %.c
++	$(showlink)
++	$(Q)$(HOSTCC) \
++		$(HOST_CFLAGS) -D_GLIBC_TEST $(CFLAGS_$(patsubst %.glibc,%,$@)) \
++		-fPIC -shared $< -o $@ -Wl,-soname,$@ \
++		$(if $($(@F)_no-z-now),$(filter-out -Wl$(comma)-z$(comma)now,$(HOST_LDFLAGS)),$(HOST_LDFLAGS)) \
++		$(patsubst %.so,%.so.glibc,$(LDFLAGS_$(patsubst %.glibc,%,$@))) $(EXTRA_LIBS)
+ 
+ clean:
+ 	$(showclean)
+-	$(Q)$(RM) *.a *.o *.so *~ core *.out *.gdb $(CLEAN_TARGETS) $(EXTRA_CLEAN)
++	$(Q)$(RM) *.a *.o *.so *.so.glibc *~ core *.out *.gdb $(CLEAN_TARGETS) $(EXTRA_CLEAN)
+ 	$(Q)$(RM_R) $(EXTRA_DIRS)
+ 
+ .PHONY: all check clean test run compile
+diff --git a/test/testsuite.h b/test/testsuite.h
+--- a/test/testsuite.h
++++ b/test/testsuite.h
+@@ -98,4 +98,10 @@ void init_testsuite(const char* testname)
+ 
+ #define STR_CMD(cmd) cmd
+ 
++#ifdef _GLIBC_TEST
++#define _SO_EXT	".so.glibc"
++#else /* _GLIBC_TEST */
++#define _SO_EXT	".so"
++#endif /* _GLIBC_TEST */
++
+ #endif	/* TESTSUITE_H */
+-- 
