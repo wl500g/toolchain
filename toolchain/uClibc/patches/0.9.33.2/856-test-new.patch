@@ -1,0 +1,424 @@
+test: New tests
+
+1. dlopen/ constload1 nodelete
+
+diff --git a/test/dlopen/Makefile.in b/test/dlopen/Makefile.in
+--- a/test/dlopen/Makefile.in
++++ b/test/dlopen/Makefile.in
+@@ -4,7 +4,8 @@
+ # rules need a little love to work with glibc ...
+ export UCLIBC_ONLY := 1
+ 
+-TESTS := dltest dltest2 dlstatic test1 test2 test3 dlundef dlafk dladdr
++TESTS := dltest dltest2 dlstatic test1 test2 test3 dlundef dlafk dladdr \
++	constload1 nodelete
+ 
+ ifneq ($(HAVE_SHARED),y)
+ TESTS_DISABLED := test3
+@@ -42,3 +43,19 @@ LDFLAGS_libtest.so := -lpthread
+ LDFLAGS_libtest1.so := ./libtest2.so -Wl,-rpath,.
+ LDFLAGS_libtest2.so := -Wl,-rpath,.
+ LDFLAGS_libtest3.so := -lpthread -Wl,-rpath,.
++
++constload1: constload2mod.so constload3mod.so
++constload1_glibc: constload2mod.so.glibc constload3mod.so.glibc
++LDFLAGS_constload1 := -ldl
++LDFLAGS_constload2mod.so := -ldl
++constload2mod.so_no-z-now := yes
++constload3mod.so_no-z-now := yes
++
++nodelete: nodelmod1.so nodelmod2.so nodelmod3.so
++nodelete_glibc: nodelmod1.so.glibc nodelmod2.so.glibc nodelmod3.so.glibc
++nodelmod3.so: nodelmod4.so
++nodelmod3.so.glibc: nodelmod4.so.glibc
++LDFLAGS_nodelete := -rdynamic -ldl
++LDFLAGS_nodelmod1.so := -Wl,-z,nodelete
++LDFLAGS_nodelmod3.so := ./nodelmod4.so
++LDFLAGS_nodelmod4.so := -Wl,-z,nodelete
+diff --git b/test/dlopen/constload1.c b/test/dlopen/constload1.c
+new file mode 100644
+--- /dev/null
++++ b/test/dlopen/constload1.c
+@@ -0,0 +1,32 @@
++#include <dlfcn.h>
++#include <errno.h>
++#include <error.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++#define __NO_TESTCODE__
++#include "../testsuite.h"
++
++int
++main (void)
++{
++  int (*foo) (void);
++  void *h;
++  int ret;
++
++  h = dlopen ("constload2mod"_SO_EXT, RTLD_LAZY | RTLD_GLOBAL);
++  if (h == NULL)
++    error (EXIT_FAILURE, errno, "cannot load module constload2mod");
++  foo = dlsym (h, "foo");
++  ret = foo ();
++  /* Note that the following dlclose() call cannot unload the objects.
++     Due to the introduced relocation dependency constload2.so depends
++     on constload3.so and the dependencies of constload2.so on constload3.so
++     is not visible to ld.so since it's done using dlopen().  */
++  if (dlclose (h) != 0)
++    {
++      puts ("failed to close");
++      exit (EXIT_FAILURE);
++    }
++  return ret;
++}
+diff --git b/test/dlopen/constload2mod.c b/test/dlopen/constload2mod.c
+new file mode 100644
+--- /dev/null
++++ b/test/dlopen/constload2mod.c
+@@ -0,0 +1,54 @@
++#include <dlfcn.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++#define __NO_TESTCODE__
++#include "../testsuite.h"
++
++extern int bar (void);
++extern int baz (void);
++extern int foo (void);
++extern void __attribute__ ((__constructor__)) init (void);
++
++void *h;
++
++int
++foo (void)
++{
++  return 42 + bar ();
++}
++
++int
++baz (void)
++{
++  return -21;
++}
++
++#define LIBNAME1	"constload3mod"_SO_EXT
++
++void
++__attribute__ ((__constructor__))
++init (void)
++{
++  h = dlopen (LIBNAME1, RTLD_GLOBAL | RTLD_LAZY);
++  if (h == NULL)
++    {
++      puts ("failed to load "LIBNAME1);
++      exit (1);
++    }
++  else
++    puts ("succeeded loading "LIBNAME1);
++}
++
++static void
++__attribute__ ((__destructor__))
++fini (void)
++{
++  if (dlclose (h) != 0)
++    {
++      puts ("failed to unload "LIBNAME1);
++      exit (1);
++    }
++  else
++    puts ("succeeded unloading "LIBNAME1);
++}
+diff --git b/test/dlopen/constload3mod.c b/test/dlopen/constload3mod.c
+new file mode 100644
+--- /dev/null
++++ b/test/dlopen/constload3mod.c
+@@ -0,0 +1,8 @@
++extern int baz (void);
++extern int bar (void);
++
++int
++bar (void)
++{
++  return -21 + baz ();
++}
+diff --git b/test/dlopen/nodelete.c b/test/dlopen/nodelete.c
+new file mode 100644
+--- /dev/null
++++ b/test/dlopen/nodelete.c
+@@ -0,0 +1,214 @@
++#include <dlfcn.h>
++#include <setjmp.h>
++#include <signal.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++#define __NO_TESTCODE__
++#include "../testsuite.h"
++
++
++static sigjmp_buf jmpbuf;
++
++
++int fini_ran;
++
++
++static void
++__attribute__ ((noreturn))
++handler (int sig)
++{
++  siglongjmp (jmpbuf, 1);
++}
++
++
++#define TEST_FUNCTION do_test ()
++static int
++do_test (void)
++{
++  /* We are testing the two possibilities to mark an object as not deletable:
++     - marked on the linker commandline with `-z nodelete'
++     - with the RTLD_NODELETE flag at dlopen()-time.
++
++     The test we are performing should be safe.  We are loading the objects,
++     get the address of variables in the respective object, unload the object
++     and then try to read the variable.  If the object is unloaded this
++     should lead to an segmentation fault.  */
++  void *p;
++  struct sigaction sa;
++
++  sa.sa_handler = handler;
++  sigfillset (&sa.sa_mask);
++  sa.sa_flags = SA_RESTART;
++
++  if (sigaction (SIGSEGV, &sa, NULL) == -1)
++    printf ("cannot install signal handler: %m\n");
++
++  p = dlopen ("nodelmod1"_SO_EXT, RTLD_LAZY);
++  if (p == NULL)
++    {
++      printf ("failed to load \"nodelmod1.so\": %s\n", dlerror ());
++      exit (1);
++    }
++  else
++    {
++      int *varp;
++
++      puts ("succeeded loading \"nodelmod1.so\"");
++
++      varp = dlsym (p, "var1");
++      if (varp == NULL)
++	{
++	  puts ("failed to get address of \"var1\" in \"nodelmod1.so\"");
++	  exit (1);
++	}
++      else
++	{
++	  *varp = 20000720;
++
++	  /* Now close the object.  */
++	  fini_ran = 0;
++	  if (dlclose (p) != 0)
++	    {
++	      puts ("failed to close \"nodelmod1.so\"");
++	      exit (1);
++	    }
++	  else if (! sigsetjmp (jmpbuf, 1))
++	    {
++	      /* Access the variable again.  */
++	      if (*varp != 20000720)
++		{
++		  puts ("\"var1\" value not correct");
++		  exit (1);
++		}
++	      else if (fini_ran != 0)
++		{
++		  puts ("destructor of \"nodelmod1.so\" ran");
++		  exit (1);
++		}
++	      else
++		puts ("-z nodelete test succeeded");
++	    }
++	  else
++	    {
++	      /* We caught an segmentation fault.  */
++	      puts ("\"nodelmod1.so\" got deleted!");
++	      exit (1);
++	    }
++	}
++    }
++
++  p = dlopen ("nodelmod2"_SO_EXT, RTLD_LAZY | RTLD_NODELETE);
++  if (p == NULL)
++    {
++      printf ("failed to load \"nodelmod2.so\": %s\n", dlerror ());
++      exit (1);
++    }
++  else
++    {
++      int *varp;
++
++      puts ("succeeded loading \"nodelmod2.so\"");
++
++      varp = dlsym (p, "var2");
++      if (varp == NULL)
++	{
++	  puts ("failed to get address of \"var2\" in \"nodelmod2.so\"");
++	  exit (1);
++	}
++      else
++	{
++	  *varp = 42;
++
++	  /* Now close the object.  */
++	  fini_ran = 0;
++	  if (dlclose (p) != 0)
++	    {
++	      puts ("failed to close \"nodelmod2.so\"");
++	      exit (1);
++	    }
++	  else if (! sigsetjmp (jmpbuf, 1))
++	    {
++	      /* Access the variable again.  */
++	      if (*varp != 42)
++		{
++		  puts ("\"var2\" value not correct");
++		  exit (1);
++		}
++	      else if (fini_ran != 0)
++		{
++		  puts ("destructor of \"nodelmod2.so\" ran");
++		  exit (1);
++		}
++	      else
++		puts ("RTLD_NODELETE test succeeded");
++	    }
++	  else
++	    {
++	      /* We caught an segmentation fault.  */
++	      puts ("\"nodelmod2.so\" got deleted!");
++	      exit (1);
++	    }
++	}
++    }
++
++  p = dlopen ("nodelmod3"_SO_EXT, RTLD_LAZY);
++  if (p == NULL)
++    {
++      printf ("failed to load \"nodelmod3.so\": %s\n", dlerror ());
++      exit (1);
++    }
++  else
++    {
++      int *(*fctp) (void);
++
++      puts ("succeeded loading \"nodelmod3.so\"");
++
++      fctp = dlsym (p, "addr");
++      if (fctp == NULL)
++	{
++	  puts ("failed to get address of \"addr\" in \"nodelmod3.so\"");
++	  exit (1);
++	}
++      else
++	{
++	  int *varp = fctp ();
++
++	  *varp = -1;
++
++	  /* Now close the object.  */
++	  fini_ran = 0;
++	  if (dlclose (p) != 0)
++	    {
++	      puts ("failed to close \"nodelmod3.so\"");
++	      exit (1);
++	    }
++	  else if (! sigsetjmp (jmpbuf, 1))
++	    {
++	      /* Access the variable again.  */
++	      if (*varp != -1)
++		{
++		  puts ("\"var_in_mod4\" value not correct");
++		  exit (1);
++		}
++	      else if (fini_ran != 0)
++		{
++		  puts ("destructor of \"nodelmod4.so\" ran");
++		  exit (1);
++		}
++	      else
++		puts ("-z nodelete in dependency succeeded");
++	    }
++	  else
++	    {
++	      /* We caught an segmentation fault.  */
++	      puts ("\"nodelmod4.so\" got deleted!");
++	      exit (1);
++	    }
++	}
++    }
++
++  return 0;
++}
++
++#include "../test-skeleton.c"
+diff --git b/test/dlopen/nodelmod1.c b/test/dlopen/nodelmod1.c
+new file mode 100644
+--- /dev/null
++++ b/test/dlopen/nodelmod1.c
+@@ -0,0 +1,10 @@
++extern int fini_ran;
++
++int var1 = 42;
++
++static void
++__attribute__ ((__destructor__))
++destr (void)
++{
++  fini_ran = 1;
++}
+diff --git b/test/dlopen/nodelmod2.c b/test/dlopen/nodelmod2.c
+new file mode 100644
+--- /dev/null
++++ b/test/dlopen/nodelmod2.c
+@@ -0,0 +1,10 @@
++extern int fini_ran;
++
++int var2 = 100;
++
++static void
++__attribute__ ((__destructor__))
++destr (void)
++{
++  fini_ran = 1;
++}
+diff --git b/test/dlopen/nodelmod3.c b/test/dlopen/nodelmod3.c
+new file mode 100644
+--- /dev/null
++++ b/test/dlopen/nodelmod3.c
+@@ -0,0 +1,8 @@
++extern int var_in_mod4;
++extern int *addr (void);
++
++int *
++addr (void)
++{
++  return &var_in_mod4;
++}
+diff --git b/test/dlopen/nodelmod4.c b/test/dlopen/nodelmod4.c
+new file mode 100644
+--- /dev/null
++++ b/test/dlopen/nodelmod4.c
+@@ -0,0 +1,10 @@
++extern int fini_ran;
++
++int var_in_mod4 = 99;
++
++static void
++__attribute__ ((__destructor__))
++destr (void)
++{
++  fini_ran = 1;
++}
+-- 
