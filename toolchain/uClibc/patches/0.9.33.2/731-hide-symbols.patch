@@ -7,9 +7,129 @@ hide internal symbols
  fee40347 getpagesize.c, unistd.h: hide __pagesize
  7431f726 malloc.h: hide internal functions (mainly debug related)
  0eb904a8 fputc.c, stdio.h: no need for hidden putc, putc_unlocked and fputc_unlocked
+ b9e58bac no need for hidden inet_ntoa_r
+ 5068fb4d remove unneeded hiddens for rtime, basename, strtof* and wcstof*
+ 3c3f899b remove unneeded hidden sigwaitinfo
+ 5fce95b1 no need for hidden sigtimedwait
+ 91450a8a parser_config.[ch]: remove duplicated hidden functions
+ bcfda18a no need for hidden lockf64
+ 23f8c147 err.c, err.h: no need for hidden functions
+ e941c481 uClibc_stdio.h: move internal to _stdio.h and make them hidden
+ 81007515 dl-iterate-phdr.c: no need for visible __dl_iterate_phdr, make it static
+ f503f6a9 getpt.c: no need for hidden posix_openpt
+ daace916 syslog.c: no need for hidden vsyslog, use a static __vsyslog instead
+ cef1f951 no need for hidden __sigpause, use an internal static function
+ 06419c7f ppoll: no need for hidden version
+ d5f8c6dd brk.c: remove libc_hidden_proto, always_inline syscall
 
 ---
 
+diff --git a/include/arpa/inet.h b/include/arpa/inet.h
+--- a/include/arpa/inet.h
++++ b/include/arpa/inet.h
+@@ -60,7 +60,6 @@ libc_hidden_proto(inet_ntoa)
+ #ifdef __UCLIBC__
+ /* Recursion-safe flavor */
+ extern char *inet_ntoa_r (struct in_addr __in, char *__buf) __THROW;
+-libc_hidden_proto(inet_ntoa_r)
+ #endif
+ 
+ /* Convert from presentation format of an Internet number in buffer
+diff --git a/include/err.h b/include/err.h
+--- a/include/err.h
++++ b/include/err.h
+@@ -36,26 +36,22 @@ extern void warn (__const char *__format, ...)
+      __attribute__ ((__format__ (__printf__, 1, 2)));
+ extern void vwarn (__const char *__format, __gnuc_va_list)
+      __attribute__ ((__format__ (__printf__, 1, 0)));
+-libc_hidden_proto(vwarn)
+ 
+ /* Likewise, but without ": " and the standard error string.  */
+ extern void warnx (__const char *__format, ...)
+      __attribute__ ((__format__ (__printf__, 1, 2)));
+ extern void vwarnx (__const char *__format, __gnuc_va_list)
+      __attribute__ ((__format__ (__printf__, 1, 0)));
+-libc_hidden_proto(vwarnx)
+ 
+ /* Likewise, and then exit with STATUS.  */
+ extern void err (int __status, __const char *__format, ...)
+      __attribute__ ((__noreturn__, __format__ (__printf__, 2, 3)));
+ extern void verr (int __status, __const char *__format, __gnuc_va_list)
+      __attribute__ ((__noreturn__, __format__ (__printf__, 2, 0)));
+-libc_hidden_proto(verr)
+ extern void errx (int __status, __const char *__format, ...)
+      __attribute__ ((__noreturn__, __format__ (__printf__, 2, 3)));
+ extern void verrx (int __status, __const char *, __gnuc_va_list)
+      __attribute__ ((__noreturn__, __format__ (__printf__, 2, 0)));
+-libc_hidden_proto(verrx)
+ 
+ __END_DECLS
+ 
+diff --git a/include/fcntl.h b/include/fcntl.h
+--- a/include/fcntl.h
++++ b/include/fcntl.h
+@@ -184,7 +184,6 @@ extern int __REDIRECT (lockf, (int __fd, int __cmd, __off64_t __len), lockf64);
+ # endif
+ # ifdef __USE_LARGEFILE64
+ extern int lockf64 (int __fd, int __cmd, __off64_t __len);
+-libc_hidden_proto(lockf64)
+ # endif
+ #endif
+ 
+diff --git a/include/internal/parse_config.h b/include/internal/parse_config.h
+--- a/include/internal/parse_config.h
++++ b/include/internal/parse_config.h
+@@ -46,12 +46,9 @@ typedef struct parser_t {
+ } parser_t;
+ 
+ parser_t* config_open(const char *filename) FAST_FUNC attribute_hidden;
+-libc_hidden_proto(config_open)
+ int config_read(parser_t *parser, char ***tokens, unsigned flags, const char *delims) FAST_FUNC attribute_hidden;
+-libc_hidden_proto(config_read)
+ #define config_read(parser, tokens, max, min, str, flags) \
+ 	config_read(parser, tokens, ((flags) | (((min) & 0xFF) << 8) | ((max) & 0xFF)), str)
+ void config_close(parser_t *parser) FAST_FUNC attribute_hidden;
+-libc_hidden_proto(config_close)
+ 
+ #endif /* __INTERNAL_PARSE_CONFIG_H */
+diff --git a/include/rpc/auth_des.h b/include/rpc/auth_des.h
+--- a/include/rpc/auth_des.h
++++ b/include/rpc/auth_des.h
+@@ -109,7 +109,6 @@ extern int getsecretkey (__const char *__name, char *__key,
+ 
+ extern int rtime (struct sockaddr_in *__addrp, struct rpc_timeval *__timep,
+ 		  struct rpc_timeval *__timeout) __THROW;
+-libc_hidden_proto(rtime)
+ 
+ __END_DECLS
+ 
+diff --git a/include/signal.h b/include/signal.h
+--- a/include/signal.h
++++ b/include/signal.h
+@@ -178,7 +178,6 @@ extern void psignal (int __sig, __const char *__s);
+    This function is a cancellation point and therefore not marked with
+    __THROW.  */
+ extern int __sigpause (int __sig_or_mask, int __is_sig);
+-libc_hidden_proto(__sigpause)
+ 
+ #ifdef __FAVOR_BSD
+ /* Set the mask of blocked signals to MASK,
+@@ -313,7 +312,6 @@ extern int sigwaitinfo (__const sigset_t *__restrict __set,
+ #ifdef _LIBC
+ extern __typeof(sigwaitinfo) __sigwaitinfo attribute_hidden;
+ #endif
+-libc_hidden_proto(sigwaitinfo)
+ 
+ /* Select any of pending signals from SET and place information in INFO.
+    Wait the time specified by TIMEOUT if no signal is pending.
+@@ -327,7 +325,6 @@ extern int sigtimedwait (__const sigset_t *__restrict __set,
+ #ifdef _LIBC
+ extern __typeof(sigtimedwait) __sigtimedwait attribute_hidden;
+ #endif
+-libc_hidden_proto(sigtimedwait)
+ 
+ /* Send signal SIG to the process PID.  Associate data in VAL with the
+    signal.  */
 diff --git a/include/stdio.h b/include/stdio.h
 --- a/include/stdio.h
 +++ b/include/stdio.h
@@ -37,10 +157,62 @@ diff --git a/include/stdio.h b/include/stdio.h
  extern int putchar_unlocked (int __c);
  
  /* SUSv3 allows putc_unlocked to be a macro */
+diff --git a/include/stdlib.h b/include/stdlib.h
+--- a/include/stdlib.h
++++ b/include/stdlib.h
+@@ -887,7 +887,6 @@ extern void setkey (__const char *__key) __THROW __nonnull ((1));
+ #ifdef __USE_XOPEN2K
+ /* Return a master pseudo-terminal handle.  */
+ extern int posix_openpt (int __oflag) __wur;
+-libc_hidden_proto(posix_openpt)
+ #endif
+ 
+ #ifdef __USE_XOPEN
+diff --git a/include/string.h b/include/string.h
+--- a/include/string.h
++++ b/include/string.h
+@@ -484,7 +484,6 @@ extern void *memfrob (void *__s, size_t __n) __THROW __nonnull ((1));
+    in <libgen.h>) which makes the XPG version of this function
+    available.  */
+ extern char *basename (__const char *__filename) __THROW __nonnull ((1));
+-libc_hidden_proto(basename)
+ # endif
+ #endif /* __USE_GNU */
+ 
+diff --git a/include/sys/poll.h b/include/sys/poll.h
+--- a/include/sys/poll.h
++++ b/include/sys/poll.h
+@@ -68,7 +68,6 @@ libc_hidden_proto(poll)
+ extern int ppoll (struct pollfd *__fds, nfds_t __nfds,
+ 		  __const struct timespec *__timeout,
+ 		  __const __sigset_t *__ss);
+-libc_hidden_proto(ppoll)
+ #endif
+ 
+ __END_DECLS
+diff --git a/include/sys/syslog.h b/include/sys/syslog.h
+--- a/include/sys/syslog.h
++++ b/include/sys/syslog.h
+@@ -208,7 +208,6 @@ libc_hidden_proto(syslog)
+    therefore not marked with __THROW.  */
+ extern void vsyslog (int __pri, __const char *__fmt, __gnuc_va_list __ap)
+      __attribute__ ((__format__ (__printf__, 2, 0)));
+-libc_hidden_proto(vsyslog)
+ #endif
+ 
+ __END_DECLS
 diff --git a/include/unistd.h b/include/unistd.h
 --- a/include/unistd.h
 +++ b/include/unistd.h
-@@ -1194,6 +1194,7 @@ __END_DECLS
+@@ -1123,7 +1123,6 @@ extern int __REDIRECT (lockf, (int __fd, int __cmd, __off64_t __len),
+ # endif
+ # ifdef __USE_LARGEFILE64
+ extern int lockf64 (int __fd, int __cmd, __off64_t __len) __wur;
+-libc_hidden_proto(lockf64)
+ # endif
+ #endif /* Use misc and F_LOCK not already defined.  */
+ 
+@@ -1194,6 +1193,7 @@ __END_DECLS
  #endif
  typedef signed smallint_type smallint;
  typedef unsigned smallint_type smalluint;
@@ -60,6 +232,33 @@ diff --git a/ldso/libdl/libdl.c b/ldso/libdl/libdl.c
  void dl_cleanup(void)
  {
  	struct dyn_elf *h, *n;
+diff --git a/libc/inet/addr.c b/libc/inet/addr.c
+--- a/libc/inet/addr.c
++++ b/libc/inet/addr.c
+@@ -114,7 +114,7 @@ libc_hidden_def(inet_addr)
+ 
+ #define INET_NTOA_MAX_LEN	16	/* max 12 digits + 3 '.'s + 1 nul */
+ 
+-char *inet_ntoa_r(struct in_addr in, char buf[INET_NTOA_MAX_LEN])
++static char *__inet_ntoa_r(struct in_addr in, char buf[INET_NTOA_MAX_LEN])
+ {
+ 	in_addr_t addr = ntohl(in.s_addr);
+ 	int i;
+@@ -133,12 +133,12 @@ char *inet_ntoa_r(struct in_addr in, char buf[INET_NTOA_MAX_LEN])
+ 
+ 	return p+1;
+ }
+-libc_hidden_def(inet_ntoa_r)
++strong_alias(__inet_ntoa_r,inet_ntoa_r)
+ 
+ char *inet_ntoa(struct in_addr in)
+ {
+ 	static char buf[INET_NTOA_MAX_LEN];
+-	return inet_ntoa_r(in, buf);
++	return __inet_ntoa_r(in, buf);
+ }
+ libc_hidden_def(inet_ntoa)
+ #endif
 diff --git a/libc/inet/resolv.c b/libc/inet/resolv.c
 --- a/libc/inet/resolv.c
 +++ b/libc/inet/resolv.c
@@ -72,6 +271,133 @@ diff --git a/libc/inet/resolv.c b/libc/inet/resolv.c
  
  /* Protected by __resolv_lock */
  extern void (*__res_sync)(void) attribute_hidden;
+diff --git a/libc/inet/rpc/rtime.c b/libc/inet/rpc/rtime.c
+--- a/libc/inet/rpc/rtime.c
++++ b/libc/inet/rpc/rtime.c
+@@ -150,4 +150,3 @@ rtime (struct sockaddr_in *addrp, struct rpc_timeval *timep,
+   timep->tv_usec = 0;
+   return 0;
+ }
+-libc_hidden_def (rtime)
+diff --git a/libc/misc/elf/dl-iterate-phdr.c b/libc/misc/elf/dl-iterate-phdr.c
+--- a/libc/misc/elf/dl-iterate-phdr.c
++++ b/libc/misc/elf/dl-iterate-phdr.c
+@@ -18,10 +18,7 @@
+ /* we want this in libc but nowhere else */
+ #ifdef __USE_GNU
+ 
+-extern __typeof(dl_iterate_phdr) __dl_iterate_phdr;
+-
+-hidden_proto(__dl_iterate_phdr)
+-int
++static int
+ __dl_iterate_phdr (int (*callback) (struct dl_phdr_info *info, size_t size, void *data), void *data)
+ {
+ 	int ret = 0;
+@@ -41,7 +38,6 @@ __dl_iterate_phdr (int (*callback) (struct dl_phdr_info *info, size_t size, void
+ #endif
+ 	return ret;
+ }
+-hidden_def (__dl_iterate_phdr)
+ 
+ # ifdef SHARED
+ 
+diff --git a/libc/misc/error/err.c b/libc/misc/error/err.c
+--- a/libc/misc/error/err.c
++++ b/libc/misc/error/err.c
+@@ -50,68 +50,68 @@ static void vwarn_work(const char *format, va_list args, int showerr)
+ 	__STDIO_AUTO_THREADUNLOCK(stderr);
+ }
+ 
+-void vwarn(const char *format, va_list args)
++static void __vwarn(const char *format, va_list args)
+ {
+ 	vwarn_work(format, args, 1);
+ }
+-libc_hidden_def(vwarn)
++strong_alias(__vwarn,vwarn)
+ 
+ void warn(const char *format, ...)
+ {
+ 	va_list args;
+ 
+ 	va_start(args, format);
+-	vwarn(format, args);
++	__vwarn(format, args);
+ 	va_end(args);
+ }
+ 
+-void vwarnx(const char *format, va_list args)
++static void __vwarnx(const char *format, va_list args)
+ {
+ 	vwarn_work(format, args, 0);
+ }
+-libc_hidden_def(vwarnx)
++strong_alias(__vwarnx,vwarnx)
+ 
+ void warnx(const char *format, ...)
+ {
+ 	va_list args;
+ 
+ 	va_start(args, format);
+-	vwarnx(format, args);
++	__vwarnx(format, args);
+ 	va_end(args);
+ }
+ 
+-void verr(int status, const char *format, va_list args)
++static void __verr(int status, const char *format, va_list args)
+ {
+-	vwarn(format, args);
++	__vwarn(format, args);
+ 	exit(status);
+ }
+-libc_hidden_def(verr)
++strong_alias(__verr,verr)
+ 
+-void attribute_noreturn err(int status, const char *format, ...)
++void err(int status, const char *format, ...)
+ {
+ 	va_list args;
+ 
+ 	va_start(args, format);
+-	verr(status, format, args);
++	__verr(status, format, args);
+ 	/* This should get optimized away.  We'll leave it now for safety. */
+ 	/* The loop is added only to keep gcc happy. */
+ 	while(1)
+ 		va_end(args);
+ }
+ 
+-void verrx(int status, const char *format, va_list args)
++static void __verrx(int status, const char *format, va_list args)
+ {
+-	vwarnx(format, args);
++	__vwarnx(format, args);
+ 	exit(status);
+ }
+-libc_hidden_def(verrx)
++strong_alias(__verrx,verrx)
+ 
+-void attribute_noreturn errx(int status, const char *format, ...)
++void errx(int status, const char *format, ...)
+ {
+ 	va_list args;
+ 
+ 	va_start(args, format);
+-	verrx(status, format, args);
++	__verrx(status, format, args);
+ 	/* This should get optimized away.  We'll leave it now for safety. */
+ 	/* The loop is added only to keep gcc happy. */
+ 	while(1)
+diff --git a/libc/misc/file/lockf64.c b/libc/misc/file/lockf64.c
+--- a/libc/misc/file/lockf64.c
++++ b/libc/misc/file/lockf64.c
+@@ -90,4 +90,3 @@ int lockf64 (int fd, int cmd, off64_t len64)
+ 
+     return fcntl(fd, cmd, &fl);
+ }
+-libc_hidden_def(lockf64)
 diff --git a/libc/misc/internals/__uClibc_main.c b/libc/misc/internals/__uClibc_main.c
 --- a/libc/misc/internals/__uClibc_main.c
 +++ b/libc/misc/internals/__uClibc_main.c
@@ -111,6 +437,73 @@ diff --git a/libc/misc/internals/__uClibc_main.c b/libc/misc/internals/__uClibc_
  
  #ifndef SHARED
  extern void __nptl_deallocate_tsd (void) __attribute ((weak));
+diff --git a/libc/misc/internals/parse_config.c b/libc/misc/internals/parse_config.c
+--- a/libc/misc/internals/parse_config.c
++++ b/libc/misc/internals/parse_config.c
+@@ -129,7 +129,7 @@ static __always_inline parser_t * FAST_FUNC config_open2(const char *filename,
+ 	return parser;
+ }
+ 
+-parser_t attribute_hidden * FAST_FUNC config_open(const char *filename)
++parser_t * FAST_FUNC config_open(const char *filename)
+ {
+ 	return config_open2(filename, fopen_or_warn_stdin);
+ }
+@@ -142,7 +142,7 @@ static void config_free_data(parser_t *parser)
+ }
+ #endif
+ 
+-void attribute_hidden FAST_FUNC config_close(parser_t *parser)
++void FAST_FUNC config_close(parser_t *parser)
+ {
+ 	if (parser) {
+ 		fclose(parser->fp);
+@@ -176,7 +176,7 @@ mintokens > 0 make config_read() print error message if less than mintokens
+ (but more than 0) are found. Empty lines are always skipped (not warned about).
+ */
+ #undef config_read
+-int attribute_hidden FAST_FUNC config_read(parser_t *parser, char ***tokens,
++int FAST_FUNC config_read(parser_t *parser, char ***tokens,
+ 											unsigned flags, const char *delims)
+ {
+ 	char *line;
+diff --git a/libc/misc/syslog/syslog.c b/libc/misc/syslog/syslog.c
+--- a/libc/misc/syslog/syslog.c
++++ b/libc/misc/syslog/syslog.c
+@@ -190,8 +190,12 @@ libc_hidden_def(openlog)
+  * syslog, vsyslog --
+  *     print message on log file; output is intended for syslogd(8).
+  */
++static
++#ifndef __USE_BSD
++__always_inline
++#endif
+ void
+-vsyslog(int pri, const char *fmt, va_list ap)
++__vsyslog(int pri, const char *fmt, va_list ap)
+ {
+ 	register char *p;
+ 	char *last_chr, *head_end, *end, *stdp;
+@@ -319,7 +323,9 @@ vsyslog(int pri, const char *fmt, va_list ap)
+  getout:
+ 	__UCLIBC_MUTEX_UNLOCK(mylock);
+ }
+-libc_hidden_def(vsyslog)
++#ifdef __USE_BSD
++strong_alias(__vsyslog,vsyslog)
++#endif
+ 
+ void
+ syslog(int pri, const char *fmt, ...)
+@@ -327,7 +333,7 @@ syslog(int pri, const char *fmt, ...)
+ 	va_list ap;
+ 
+ 	va_start(ap, fmt);
+-	vsyslog(pri, fmt, ap);
++	__vsyslog(pri, fmt, ap);
+ 	va_end(ap);
+ }
+ libc_hidden_def(syslog)
 diff --git a/libc/misc/time/time.c b/libc/misc/time/time.c
 --- a/libc/misc/time/time.c
 +++ b/libc/misc/time/time.c
@@ -123,6 +516,80 @@ diff --git a/libc/misc/time/time.c b/libc/misc/time/time.c
  
  extern rule_struct _time_tzinfo[2] attribute_hidden;
  
+diff --git a/libc/signal/sigpause.c b/libc/signal/sigpause.c
+--- a/libc/signal/sigpause.c
++++ b/libc/signal/sigpause.c
+@@ -31,7 +31,7 @@
+ 
+ /* Set the mask of blocked signals to MASK,
+    wait for a signal to arrive, and then restore the mask.  */
+-int __sigpause (int sig_or_mask, int is_sig)
++static int __internal_sigpause (int sig_or_mask, int is_sig)
+ {
+   sigset_t set;
+ 
+@@ -51,7 +51,7 @@ int __sigpause (int sig_or_mask, int is_sig)
+      to do anything here.  */
+   return sigsuspend (&set);
+ }
+-libc_hidden_def(__sigpause)
++strong_alias(__internal_sigpause,__sigpause)
+ 
+ #undef sigpause
+ 
+@@ -62,16 +62,16 @@ int sigpause (int mask)
+ {
+ #ifdef __UCLIBC_HAS_THREADS_NATIVE__
+   if (SINGLE_THREAD_P)
+-    return __sigpause (mask, 0);
++    return __internal_sigpause (mask, 0);
+ 
+   int oldtype = LIBC_CANCEL_ASYNC ();
+ 
+-  int result = __sigpause (mask, 0);
++  int result = __internal_sigpause (mask, 0);
+ 
+   LIBC_CANCEL_RESET (oldtype);
+ 
+   return result;
+ #else
+-  return __sigpause (mask, 0);
++  return __internal_sigpause (mask, 0);
+ #endif
+ }
+diff --git a/libc/signal/sigwait.c b/libc/signal/sigwait.c
+--- a/libc/signal/sigwait.c
++++ b/libc/signal/sigwait.c
+@@ -96,7 +96,7 @@ int sigwait (const sigset_t *set, int *sig)
+ int sigwait (const sigset_t *set, int *sig)
+ {
+ 	int ret = 1;
+-	if ((ret = sigwaitinfo(set, NULL)) != -1) {
++	if ((ret = __sigwaitinfo(set, NULL)) != -1) {
+ 		*sig = ret;
+ 		return 0;
+ 	}
+diff --git a/libc/stdio/_stdio.h b/libc/stdio/_stdio.h
+--- a/libc/stdio/_stdio.h
++++ b/libc/stdio/_stdio.h
+@@ -41,6 +41,9 @@
+ 
+ 
+ #ifdef __UCLIBC_HAS_THREADS__
++extern void __stdio_init_mutex(__UCLIBC_MUTEX_TYPE *m) attribute_hidden;
++
++extern volatile int _stdio_openlist_use_count attribute_hidden; /* _stdio_openlist_del_lock */
+ #define __STDIO_OPENLIST_INC_USE			\
+ do {							\
+ 	__STDIO_THREADLOCK_OPENLIST_DEL;		\
+@@ -53,6 +56,7 @@ extern void _stdio_openlist_dec_use(void) attribute_hidden;
+ #define __STDIO_OPENLIST_DEC_USE			\
+ 	_stdio_openlist_dec_use()
+ 
++extern int _stdio_openlist_del_count attribute_hidden; /* _stdio_openlist_del_lock */
+ #define __STDIO_OPENLIST_INC_DEL_CNT			\
+ do {							\
+ 	__STDIO_THREADLOCK_OPENLIST_DEL;		\
 diff --git a/libc/stdio/fputc.c b/libc/stdio/fputc.c
 --- a/libc/stdio/fputc.c
 +++ b/libc/stdio/fputc.c
@@ -172,6 +639,73 @@ diff --git a/libc/stdlib/_atexit.c b/libc/stdlib/_atexit.c
  
  /*
   * Normal program termination
+diff --git a/libc/stdlib/_strtod.c b/libc/stdlib/_strtod.c
+--- a/libc/stdlib/_strtod.c
++++ b/libc/stdlib/_strtod.c
+@@ -509,7 +509,6 @@ void attribute_hidden __fp_range_check(__fpmax_t y, __fpmax_t x)
+ #endif
+ 
+ 
+-libc_hidden_proto(__XL_NPP(strtof))
+ float __XL_NPP(strtof)(const Wchar *str, Wchar **endptr   __LOCALE_PARAM )
+ {
+ #if FPMAX_TYPE == 1
+@@ -526,7 +525,6 @@ float __XL_NPP(strtof)(const Wchar *str, Wchar **endptr   __LOCALE_PARAM )
+ 	return y;
+ #endif
+ }
+-libc_hidden_def(__XL_NPP(strtof))
+ 
+ #endif
+ #endif
+diff --git a/libc/stdlib/bsd_getpt.c b/libc/stdlib/bsd_getpt.c
+--- a/libc/stdlib/bsd_getpt.c
++++ b/libc/stdlib/bsd_getpt.c
+@@ -40,7 +40,7 @@ const char __libc_ptyname1[] attribute_hidden = PTYNAME1;
+ const char __libc_ptyname2[] attribute_hidden = PTYNAME2;
+ 
+ /* Open a master pseudo terminal and return its file descriptor.  */
+-int
++static __inline__ int
+ __getpt (void)
+ {
+   char buf[sizeof (_PATH_PTY) + 2];
+diff --git a/libc/stdlib/getpt.c b/libc/stdlib/getpt.c
+--- a/libc/stdlib/getpt.c
++++ b/libc/stdlib/getpt.c
+@@ -43,12 +43,12 @@ extern __typeof(statfs) __libc_statfs;
+ 
+ #if !defined __UNIX98PTY_ONLY__ && defined __UCLIBC_HAS_GETPT__
+ /* Prototype for function that opens BSD-style master pseudo-terminals.  */
+-extern int __bsd_getpt (void) attribute_hidden;
++static __inline__ int __bsd_getpt (void);
+ #endif
+ 
+ /* Open a master pseudo terminal and return its file descriptor.  */
+-int
+-posix_openpt (int flags)
++static int
++__posix_openpt (int flags)
+ {
+ #define have_no_dev_ptmx (1<<0)
+ #define devpts_mounted   (1<<1)
+@@ -112,14 +112,14 @@ posix_openpt (int flags)
+ #endif
+   return -1;
+ }
+-libc_hidden_def(posix_openpt)
++strong_alias(__posix_openpt,posix_openpt)
+ #undef have_no_dev_ptmx
+ #undef devpts_mounted
+ 
+ #if defined __USE_GNU && defined __UCLIBC_HAS_GETPT__
+ int getpt (void)
+ {
+-	return posix_openpt(O_RDWR);
++	return __posix_openpt(O_RDWR);
+ }
+ 
+ #if !defined __UNIX98PTY_ONLY__ && defined __UCLIBC_HAS_GETPT__
 diff --git a/libc/stdlib/malloc-standard/mallinfo.c b/libc/stdlib/malloc-standard/mallinfo.c
 --- a/libc/stdlib/malloc-standard/mallinfo.c
 +++ b/libc/stdlib/malloc-standard/mallinfo.c
@@ -227,6 +761,114 @@ diff --git a/libc/stdlib/malloc-standard/malloc.h b/libc/stdlib/malloc-standard/
  
  #include <assert.h>
  
+diff --git a/libc/string/basename.c b/libc/string/basename.c
+--- a/libc/string/basename.c
++++ b/libc/string/basename.c
+@@ -24,5 +24,4 @@ char *basename(const char *path)
+ 
+ 	return (char *) p;
+ }
+-libc_hidden_def(basename)
+ #endif
+diff --git a/libc/sysdeps/linux/common/__rt_sigtimedwait.c b/libc/sysdeps/linux/common/__rt_sigtimedwait.c
+--- a/libc/sysdeps/linux/common/__rt_sigtimedwait.c
++++ b/libc/sysdeps/linux/common/__rt_sigtimedwait.c
+@@ -57,8 +57,8 @@ static int do_sigtimedwait(const sigset_t *set, siginfo_t *info,
+ }
+ 
+ /* Return any pending signal or wait for one for the given time.  */
+-int attribute_hidden __sigtimedwait(const sigset_t *set, siginfo_t *info,
+-				    const struct timespec *timeout)
++int __sigtimedwait(const sigset_t *set, siginfo_t *info,
++		   const struct timespec *timeout)
+ {
+ 	if(SINGLE_THREAD_P)
+ 		return do_sigtimedwait(set, info, timeout);
+@@ -78,15 +78,14 @@ int attribute_hidden __sigtimedwait(const sigset_t *set, siginfo_t *info,
+ #  include <stddef.h>
+ #  define __NR___rt_sigtimedwait __NR_rt_sigtimedwait
+ static _syscall4(int, __rt_sigtimedwait, const sigset_t *, set,
+-				 siginfo_t *, info, const struct timespec *, timeout,
+-				 size_t, setsize);
++		 siginfo_t *, info, const struct timespec *, timeout,
++		 size_t, setsize);
+ 
+-int attribute_hidden __sigtimedwait(const sigset_t * set, siginfo_t * info,
+-									const struct timespec *timeout)
++int __sigtimedwait(const sigset_t * set, siginfo_t * info,
++		   const struct timespec *timeout)
+ {
+ 	return __rt_sigtimedwait(set, info, timeout, _NSIG / 8);
+ }
+ # endif /* !__UCLIBC_HAS_THREADS_NATIVE__ */
+ weak_alias(__sigtimedwait,sigtimedwait)
+-libc_hidden_weak(sigtimedwait)
+ #endif
+diff --git a/libc/sysdeps/linux/common/__rt_sigwaitinfo.c b/libc/sysdeps/linux/common/__rt_sigwaitinfo.c
+--- a/libc/sysdeps/linux/common/__rt_sigwaitinfo.c
++++ b/libc/sysdeps/linux/common/__rt_sigwaitinfo.c
+@@ -75,15 +75,13 @@ int __sigwaitinfo(const sigset_t *set, siginfo_t *info)
+ #  include <stddef.h>
+ #  define __NR___rt_sigwaitinfo __NR_rt_sigtimedwait
+ static _syscall4(int, __rt_sigwaitinfo, const sigset_t *, set,
+-				 siginfo_t *, info, const struct timespec *, timeout,
+-				 size_t, setsize);
++		 siginfo_t *, info, const struct timespec *, timeout,
++		 size_t, setsize);
+ 
+-int attribute_hidden __sigwaitinfo(const sigset_t * set, siginfo_t * info)
++int __sigwaitinfo(const sigset_t * set, siginfo_t * info)
+ {
+ 	return __rt_sigwaitinfo(set, info, NULL, _NSIG / 8);
+ }
+ # endif
+-libc_hidden_proto(sigwaitinfo)
+ weak_alias (__sigwaitinfo, sigwaitinfo)
+-libc_hidden_weak(sigwaitinfo)
+ #endif
+diff --git a/libc/sysdeps/linux/common/bits/uClibc_stdio.h b/libc/sysdeps/linux/common/bits/uClibc_stdio.h
+--- a/libc/sysdeps/linux/common/bits/uClibc_stdio.h
++++ b/libc/sysdeps/linux/common/bits/uClibc_stdio.h
+@@ -355,14 +355,19 @@ extern void _stdio_term(void) attribute_hidden;
+ extern struct __STDIO_FILE_STRUCT *_stdio_openlist;
+ 
+ #ifdef __UCLIBC_HAS_THREADS__
+-__UCLIBC_IO_MUTEX_EXTERN(_stdio_openlist_add_lock);
++__UCLIBC_IO_MUTEX_EXTERN(_stdio_openlist_add_lock)
++# ifndef __UCLIBC_HAS_THREADS_NATIVE__
++	attribute_hidden
++# endif
++	;
+ #ifdef __STDIO_BUFFERS
+-__UCLIBC_IO_MUTEX_EXTERN(_stdio_openlist_del_lock);
+-extern volatile int _stdio_openlist_use_count; /* _stdio_openlist_del_lock */
+-extern int _stdio_openlist_del_count; /* _stdio_openlist_del_lock */
++__UCLIBC_IO_MUTEX_EXTERN(_stdio_openlist_del_lock)
++# ifndef __UCLIBC_HAS_THREADS_NATIVE__
++	attribute_hidden
++# endif
++	;
+ #endif
+ extern int _stdio_user_locking;
+-extern void __stdio_init_mutex(__UCLIBC_MUTEX_TYPE *m) attribute_hidden;
+ #endif
+ 
+ #endif
+diff --git a/libc/sysdeps/linux/common/brk.c b/libc/sysdeps/linux/common/brk.c
+--- a/libc/sysdeps/linux/common/brk.c
++++ b/libc/sysdeps/linux/common/brk.c
+@@ -8,10 +8,8 @@
+ #include <unistd.h>
+ #include <sys/syscall.h>
+ 
+-libc_hidden_proto(brk)
+-
+ #define __NR___syscall_brk __NR_brk
+-static inline _syscall1(void *, __syscall_brk, void *, end)
++static __always_inline _syscall1(void *, __syscall_brk, void *, end)
+ 
+ /* This must be initialized data because commons can't have aliases.  */
+ void * __curbrk attribute_hidden = 0;
 diff --git a/libc/sysdeps/linux/common/getpagesize.c b/libc/sysdeps/linux/common/getpagesize.c
 --- a/libc/sysdeps/linux/common/getpagesize.c
 +++ b/libc/sysdeps/linux/common/getpagesize.c
@@ -239,4 +881,44 @@ diff --git a/libc/sysdeps/linux/common/getpagesize.c b/libc/sysdeps/linux/common
  /* Return the system page size.  */
  /* couldn't make __getpagesize hidden, because shm.h uses it in a macro */
  extern __typeof(getpagesize) __getpagesize;
+diff --git a/libc/sysdeps/linux/common/ppoll.c b/libc/sysdeps/linux/common/ppoll.c
+--- a/libc/sysdeps/linux/common/ppoll.c
++++ b/libc/sysdeps/linux/common/ppoll.c
+@@ -17,13 +17,13 @@
+    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
+    02111-1307 USA.  */
+ 
+-#include <signal.h>
+ #include <sys/syscall.h>
+-#include <sys/poll.h>
+-#define __need_NULL
+-#include <stddef.h>
+ 
+-#if defined __NR_ppoll && defined __UCLIBC_LINUX_SPECIFIC__
++#if defined __NR_ppoll && defined __UCLIBC_LINUX_SPECIFIC__ && defined __USE_GNU
++# define __need_NULL
++# include <stddef.h>
++# include <signal.h>
++# include <sys/poll.h>
+ # ifdef __UCLIBC_HAS_THREADS_NATIVE__
+ #  include <sysdep-cancel.h>
+ # else
+@@ -51,5 +51,4 @@ ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout,
+ 	return result;
+ # endif
+ }
+-libc_hidden_def(ppoll)
+ #endif
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/sigtimedwait.c b/libpthread/nptl/sysdeps/unix/sysv/linux/sigtimedwait.c
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/sigtimedwait.c
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/sigtimedwait.c
+@@ -67,7 +67,7 @@ do_sigtimedwait (const sigset_t *set, siginfo_t *info,
+ 
+ 
+ /* Return any pending signal or wait for one for the given time.  */
+-int attribute_hidden
++int
+ __sigtimedwait (const sigset_t *set, siginfo_t *info,
+ 		const struct timespec *timeout)
+ {
 -- 
