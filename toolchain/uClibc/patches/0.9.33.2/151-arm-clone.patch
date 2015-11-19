@@ -17,16 +17,29 @@ Regression introduced by commit e58798e107d652644629a1daaa95d76430808d53
 Signed-off-by: Filippo Arcidiacono <filippo.arcidiacono@st.com>
 Signed-off-by: Giuseppe Di Giore <giuseppe.di-giore@st.com>
 Signed-off-by: Carmelo Amoroso <carmelo.amoroso@st.com>
+
+---
+From 2d5f1c499ff459c869e904aab0fcb1c0c70a5ce0
+From: Will Newton <will.newton@linaro.org>
+Date: Tue, 02 Apr 2013 12:56:00 +0000
+Subject: arm/clone.S: Add missing IT instruction for Thumb2.
+
+The conditional load needs to be made part of an IT block on Thumb2
+cores.
+
+Signed-off-by: Will Newton <will.newton@linaro.org>
+Signed-off-by: Bernhard Reutner-Fischer <rep.dot.nop@gmail.com>
 ---
 
 diff --git a/libc/sysdeps/linux/arm/clone.S b/libc/sysdeps/linux/arm/clone.S
 --- a/libc/sysdeps/linux/arm/clone.S
 +++ b/libc/sysdeps/linux/arm/clone.S
-@@ -110,8 +110,8 @@ __clone:
+@@ -110,8 +110,9 @@ __clone:
  	ldr	r4, [sp, #12]
  	DO_CALL (clone)
  	movs	a1, a1
 -	blt	__error
++	IT(t, ne)
  	ldmnefd	sp!, {r4}
 +	blt	__error
  	IT(t, ne)
