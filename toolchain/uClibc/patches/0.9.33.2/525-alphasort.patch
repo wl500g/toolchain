@@ -1,0 +1,31 @@
+From cebc143270492fbd817e572281e480f8e5cc86ec
+From: Peter S. Mazinger <ps.m@gmx.net>
+Date: Wed, 16 Mar 2011 20:50:52 +0000
+Subject: alphasort*.c: use strcoll instead of strcmp to support locales
+
+Signed-off-by: Peter S. Mazinger <ps.m@gmx.net>
+Signed-off-by: Bernhard Reutner-Fischer <rep.dot.nop@gmail.com>
+---
+diff --git a/libc/misc/dirent/alphasort.c b/libc/misc/dirent/alphasort.c
+--- a/libc/misc/dirent/alphasort.c
++++ b/libc/misc/dirent/alphasort.c
+@@ -10,6 +10,6 @@
+ 
+ int alphasort(const struct dirent **a, const struct dirent **b)
+ {
+-	return strcmp((*a)->d_name, (*b)->d_name);
++	return strcoll((*a)->d_name, (*b)->d_name);
+ }
+ 
+diff --git a/libc/misc/dirent/alphasort64.c b/libc/misc/dirent/alphasort64.c
+--- a/libc/misc/dirent/alphasort64.c
++++ b/libc/misc/dirent/alphasort64.c
+@@ -12,5 +12,5 @@
+ 
+ int alphasort64(const struct dirent64 **a, const struct dirent64 **b)
+ {
+-	return strcmp((*a)->d_name, (*b)->d_name);
++	return strcoll((*a)->d_name, (*b)->d_name);
+ }
+--
+cgit v0.9.1
