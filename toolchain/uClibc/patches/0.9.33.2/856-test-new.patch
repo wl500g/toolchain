@@ -24,8 +24,8 @@ diff --git a/test/dlopen/Makefile.in b/test/dlopen/Makefile.in
 +constload1_glibc: constload2mod.so.glibc constload3mod.so.glibc
 +LDFLAGS_constload1 := -ldl
 +LDFLAGS_constload2mod.so := -ldl
-+constload2mod.so_no-z-now := yes
-+constload3mod.so_no-z-now := yes
++LDFLAGS-OMIT-constload2mod.so := -Wl,-z,now
++LDFLAGS-OMIT-constload3mod.so := -Wl,-z,now
 +
 +nodelete: nodelmod1.so nodelmod2.so nodelmod3.so
 +nodelete_glibc: nodelmod1.so.glibc nodelmod2.so.glibc nodelmod3.so.glibc

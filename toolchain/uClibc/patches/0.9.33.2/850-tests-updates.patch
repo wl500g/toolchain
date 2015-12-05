@@ -16,6 +16,7 @@ tests: Upstream fixes
  74dd5ff4 test: update test-skeleton.c
  8b150a94 test: silence warning in skeleton
  bad7c039 test: silence warning in testsuite.h
+ 72215487 tests: add OMIT logic to remove compilation flag.
  85891447 test/math: Select correct ULPs for mips32/mips64
  b2812877 test/math: don't try to build test dep as test
  9902a14b test/math: add libm-test-ulps-{arm,mips32,mips64} files
@@ -120,6 +121,37 @@ diff --git a/test/Test.mak b/test/Test.mak
  # provide build rules even for disabled tests:
  U_TARGETS += $(TESTS_DISABLED)
  G_TARGETS += $(addsuffix _glibc,$(TESTS_DISABLED)) $(GLIBC_TESTS_DISABLED)
+@@ -99,12 +100,14 @@ $(MAKE_SRCS): Makefile $(TESTDIR)Makefile $(TESTDIR)Rules.mak $(TESTDIR)Test.mak
+ 
+ $(U_TARGETS): $(U_TARGET_SRCS) $(MAKE_SRCS)
+ 	$(showlink)
+-	$(Q)$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$(notdir $(CURDIR))) $(CFLAGS_$@) -c $@.c -o $@.o
++	$(Q)$(CC) $(filter-out $(CFLAGS-OMIT-$@),$(CFLAGS)) $(EXTRA_CFLAGS) $(CFLAGS_$(notdir $(CURDIR))) $(CFLAGS_$@) -c $@.c -o $@.o
+ 	$(Q)$(CC) $(LDFLAGS) $@.o -o $@ $(EXTRA_LDFLAGS) $(LDFLAGS_$@)
+ 
+ $(G_TARGETS): $(U_TARGET_SRCS) $(MAKE_SRCS)
+ 	$(showlink)
+-	$(Q)$(HOSTCC) $(HOST_CFLAGS) $(CFLAGS_$(notdir $(CURDIR))) $(CFLAGS_$(patsubst %_glibc,%,$@)) -c $(patsubst %_glibc,%,$@).c -o $@.o
++	$(Q)$(HOSTCC) $(filter-out $(HOST_CFLAGS-OMIT-$(patsubst %_glibc,%,$@)),$(HOST_CFLAGS)) \
++	$(CFLAGS_$(notdir $(CURDIR))) $(CFLAGS_$(patsubst %_glibc,%,$@)) \
++	-c $(patsubst %_glibc,%,$@).c -o $@.o
+ 	$(Q)$(HOSTCC) $(HOST_LDFLAGS) $@.o -o $@ $(EXTRA_LDFLAGS) $(LDFLAGS_$(patsubst %_glibc,%,$@))
+ 
+ 
+@@ -117,9 +120,11 @@ shell_%:
+ %.so: %.c
+ 	$(showlink)
+ 	$(Q)$(CC) \
+-		$(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$(patsubst %_glibc,%,$@)) \
++		$(filter-out $(CFLAGS-OMIT-$<),$(CFLAGS)) $(EXTRA_CFLAGS) \
++		$(CFLAGS_$(patsubst %_glibc,%,$@)) \
+ 		-fPIC -shared $< -o $@ -Wl,-soname,$@ \
+-		$(LDFLAGS) $(EXTRA_LIBS) $(LDFLAGS_$(patsubst %_glibc,%,$@))
++		$(filter-out $(LDFLAGS-OMIT-$<),$(LDFLAGS)) $(EXTRA_LIBS) \
++		$(LDFLAGS_$(patsubst %_glibc,%,$@))
+ 
+ clean:
+ 	$(showclean)
 diff --git a/test/test-skeleton.c b/test/test-skeleton.c
 --- a/test/test-skeleton.c
 +++ b/test/test-skeleton.c
