@@ -1,3 +1,5 @@
+ OpenWRT patch
+
 --- a/include/string.h
 +++ b/include/string.h
 @@ -355,18 +355,40 @@ extern char *index (__const char *__s, i

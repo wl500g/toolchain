@@ -1,3 +1,5 @@
+ OpenWRT patch
+
 --- a/libc/stdio/_stdio.c
 +++ b/libc/stdio/_stdio.c
 @@ -124,7 +124,7 @@ static FILE _stdio_streams[] = {

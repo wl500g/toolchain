@@ -1,3 +1,7 @@
+fix readdir_r returns success code while it in fact failed 
+
+ Freetz.org patch
+
 --- a/libc/misc/dirent/readdir_r.c
 +++ b/libc/misc/dirent/readdir_r.c
 @@ -22,7 +22,6 @@
