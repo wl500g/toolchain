@@ -1,10 +1,6 @@
 test: Isolate from host standart libraries if TEST_INSTALLED_UCLIBC not set
 
-Additionally, provide:
-1. Ability to suppress ld flag -z,now for shared libraries by define 
- <target>.so_no-z-now := yes
-
-2. Allow to build separate glibc shared objects(*.so.glibc).
+Additionally, allow to build separate glibc shared objects(*.so.glibc).
  Pass -D_GLIBC_TEST compiler flag for host builds, define _SO_EXT for use
  in application code in testsuite.h
 
