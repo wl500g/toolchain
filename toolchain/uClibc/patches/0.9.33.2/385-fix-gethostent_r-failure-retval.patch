@@ -1,3 +1,5 @@
+ Gentoo patch
+
 --- a/libc/inet/resolv.c
 +++ b/libc/inet/resolv.c
 @@ -2536,7 +2536,7 @@

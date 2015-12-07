@@ -1,3 +1,5 @@
+ldso: fix dlsym hang when reloading DSOs
+
 It can happen under certain cases that the DSO had refcount 0,
 but was already loaded. (NODELETE flag is set, or it is pulled
 in via both NEEDED dependency and explicit dlopen()).
@@ -7,6 +9,9 @@ scope as it is already there. Or we end up corrupting the linked
 list and further dlsym lookups will hang.
 
 Signed-off-by: Timo Teräs <timo.teras@iki.fi>
+
+Ref.: http://lists.uclibc.org/pipermail/uclibc/2013-June/047819.html
+
 ---
 
 diff --git a/ldso/libdl/libdl.c b/ldso/libdl/libdl.c

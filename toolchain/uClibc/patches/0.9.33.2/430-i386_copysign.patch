@@ -1,3 +1,5 @@
+ OpenWRT patch
+
 --- a/libc/sysdeps/linux/i386/Makefile.arch
 +++ b/libc/sysdeps/linux/i386/Makefile.arch
 @@ -9,6 +9,7 @@ CSRC := brk.c sigaction.c __syscall_erro
