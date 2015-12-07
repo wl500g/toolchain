@@ -1,0 +1,62 @@
+inet/resolv: Fix broken h_aliases list terminator after 2dab3f5
+
+ Commit 2dab3f5a "resolv: tiny shrinkage in /etc/hosts handling" leads to
+ that read_etc_hosts_r() provide garbage pointer at the end of h_aliases
+ list if more than four hostnames follow a dotted quad in /etc/hosts
+
+ Test-case:
+
+ Add following line to /etc/hosts
+ 63.63.0.2    host1 alias2 alias3 alias4 alias5
+
+	#include <stdio.h>
+	#include <errno.h>
+	#include <netdb.h>
+	#include <sys/types.h>
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <arpa/inet.h>
+
+	int main (void)
+	{
+		int i;
+		char *a;
+		struct hostent *he;
+		struct in_addr ipv4addr;
+
+		inet_pton(AF_INET, "63.63.0.2", &ipv4addr);
+		he = gethostbyaddr(&ipv4addr, sizeof ipv4addr, AF_INET);
+		if (he == NULL)
+			exit(1);
+		printf("Host name: '%s'\n", he->h_name);
+		i = 0;
+		while ((a = he->h_aliases[i]) != NULL) {
+			printf("Host alias: '%s'\n", a);
+			++i;
+		}
+
+		return 0;
+	}
+
+ Wrong output:
+
+ Host name: 'host1'
+ Host alias: 'alias2'
+ Host alias: 'alias3'
+ Host alias: 'alias4'
+ Host alias: 'alias5'
+ Host alias: '??'
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+--- a/libc/inet/resolv.c
++++ b/libc/inet/resolv.c
+@@ -1615,7 +1615,7 @@ parser_t * __open_etc_hosts(void)
+ 
+ #define MINTOKENS 2 /* ip address + canonical name */
+ #define MAXTOKENS (MINTOKENS + MAXALIASES)
+-#define HALISTOFF (sizeof(char*) * MAXTOKENS)
++#define HALISTOFF (sizeof(char*) * (MAXTOKENS + 1))	/* reserve space for list terminator */
+ #define INADDROFF (HALISTOFF + 2 * sizeof(char*))
+ 
+ int attribute_hidden __read_etc_hosts_r(
