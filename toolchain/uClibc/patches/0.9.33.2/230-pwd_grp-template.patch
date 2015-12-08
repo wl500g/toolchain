@@ -1,0 +1,626 @@
+libc/pwd_grp: Create template for non-reentrant functions
+
+ Avoid a lot of copy'n'paste code, no functionality change
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+diff --git a/libc/pwd_grp/fgetgrent.c b/libc/pwd_grp/fgetgrent.c
+--- a/libc/pwd_grp/fgetgrent.c
++++ b/libc/pwd_grp/fgetgrent.c
+@@ -4,5 +4,15 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_fgetgrent
++#include <features.h>
++
++#ifdef __USE_SVID
++
++#define GETXXKEY_FUNC		fgetgrent
++#define GETXXKEY_ENTTYPE	struct group
++#define GETXXKEY_ADD_PARAMS	FILE *stream
++#define GETXXKEY_ADD_VARIABLES	stream
++#define GETXXKEY_BUFLEN		__UCLIBC_GRP_BUFFER_SIZE__
+ #include "pwd_grp.c"
++
++#endif
+diff --git a/libc/pwd_grp/fgetpwent.c b/libc/pwd_grp/fgetpwent.c
+--- a/libc/pwd_grp/fgetpwent.c
++++ b/libc/pwd_grp/fgetpwent.c
+@@ -4,5 +4,15 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_fgetpwent
++#include <features.h>
++
++#ifdef __USE_SVID
++
++#define GETXXKEY_FUNC		fgetpwent
++#define GETXXKEY_ENTTYPE	struct passwd
++#define GETXXKEY_ADD_PARAMS	FILE *stream
++#define GETXXKEY_ADD_VARIABLES	stream
++#define GETXXKEY_BUFLEN		__UCLIBC_PWD_BUFFER_SIZE__
+ #include "pwd_grp.c"
++
++#endif
+diff --git a/libc/pwd_grp/fgetspent.c b/libc/pwd_grp/fgetspent.c
+--- a/libc/pwd_grp/fgetspent.c
++++ b/libc/pwd_grp/fgetspent.c
+@@ -4,5 +4,9 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_fgetspent
++#define GETXXKEY_FUNC		fgetspent
++#define GETXXKEY_ENTTYPE	struct spwd
++#define GETXXKEY_ADD_PARAMS	FILE *stream
++#define GETXXKEY_ADD_VARIABLES	stream
++#define GETXXKEY_BUFLEN		__UCLIBC_PWD_BUFFER_SIZE__
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getgrent.c b/libc/pwd_grp/getgrent.c
+--- a/libc/pwd_grp/getgrent.c
++++ b/libc/pwd_grp/getgrent.c
+@@ -4,5 +4,8 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getgrent
++#define GETXXKEY_FUNC		getgrent
++#define GETXXKEY_ENTTYPE	struct group
++#define GETXXKEY_ADD_PARAMS	void
++#define GETXXKEY_BUFLEN		__UCLIBC_GRP_BUFFER_SIZE__
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getgrgid.c b/libc/pwd_grp/getgrgid.c
+--- a/libc/pwd_grp/getgrgid.c
++++ b/libc/pwd_grp/getgrgid.c
+@@ -4,5 +4,9 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getgrgid
++#define GETXXKEY_FUNC		getgrgid
++#define GETXXKEY_ENTTYPE	struct group
++#define GETXXKEY_ADD_PARAMS	gid_t git
++#define GETXXKEY_ADD_VARIABLES	git
++#define GETXXKEY_BUFLEN		__UCLIBC_GRP_BUFFER_SIZE__
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getgrgid_r.c b/libc/pwd_grp/getgrgid_r.c
+--- a/libc/pwd_grp/getgrgid_r.c
++++ b/libc/pwd_grp/getgrgid_r.c
+@@ -4,5 +4,10 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getgrgid_r
++#define GETXXKEY_R_FUNC		getgrgid_r
++#define GETXXKEY_R_PARSER	__parsegrent
++#define GETXXKEY_R_ENTTYPE	struct group
++#define GETXXKEY_R_TEST(ENT)	((ENT)->gr_gid == key)
++#define DO_GETXXKEY_R_KEYTYPE	gid_t
++#define DO_GETXXKEY_R_PATHNAME  _PATH_GROUP
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getgrnam.c b/libc/pwd_grp/getgrnam.c
+--- a/libc/pwd_grp/getgrnam.c
++++ b/libc/pwd_grp/getgrnam.c
+@@ -4,5 +4,9 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getgrnam
++#define GETXXKEY_FUNC		getgrnam
++#define GETXXKEY_ENTTYPE	struct group
++#define GETXXKEY_ADD_PARAMS	const char *name
++#define GETXXKEY_ADD_VARIABLES	name
++#define GETXXKEY_BUFLEN		__UCLIBC_GRP_BUFFER_SIZE__
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getgrnam_r.c b/libc/pwd_grp/getgrnam_r.c
+--- a/libc/pwd_grp/getgrnam_r.c
++++ b/libc/pwd_grp/getgrnam_r.c
+@@ -4,5 +4,10 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getgrnam_r
++#define GETXXKEY_R_FUNC		getgrnam_r
++#define GETXXKEY_R_PARSER	__parsegrent
++#define GETXXKEY_R_ENTTYPE	struct group
++#define GETXXKEY_R_TEST(ENT)	(!strcmp((ENT)->gr_name, key))
++#define DO_GETXXKEY_R_KEYTYPE	const char *__restrict
++#define DO_GETXXKEY_R_PATHNAME  _PATH_GROUP
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getpwent.c b/libc/pwd_grp/getpwent.c
+--- a/libc/pwd_grp/getpwent.c
++++ b/libc/pwd_grp/getpwent.c
+@@ -4,5 +4,8 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getpwent
++#define GETXXKEY_FUNC		getpwent
++#define GETXXKEY_ENTTYPE	struct passwd
++#define GETXXKEY_ADD_PARAMS	void
++#define GETXXKEY_BUFLEN		__UCLIBC_PWD_BUFFER_SIZE__
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getpwnam.c b/libc/pwd_grp/getpwnam.c
+--- a/libc/pwd_grp/getpwnam.c
++++ b/libc/pwd_grp/getpwnam.c
+@@ -4,5 +4,10 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getpwnam
++#define GETXXKEY_FUNC		getpwnam
++#define GETXXKEY_ENTTYPE	struct passwd
++#define GETXXKEY_ADD_PARAMS	const char *name
++#define GETXXKEY_ADD_VARIABLES	name
++#define GETXXKEY_BUFLEN		__UCLIBC_PWD_BUFFER_SIZE__
++#define GETXXKEY_FUNC_HIDDEN
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getpwnam_r.c b/libc/pwd_grp/getpwnam_r.c
+--- a/libc/pwd_grp/getpwnam_r.c
++++ b/libc/pwd_grp/getpwnam_r.c
+@@ -4,5 +4,10 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getpwnam_r
++#define GETXXKEY_R_FUNC		getpwnam_r
++#define GETXXKEY_R_PARSER	__parsepwent
++#define GETXXKEY_R_ENTTYPE	struct passwd
++#define GETXXKEY_R_TEST(ENT)	(!strcmp((ENT)->pw_name, key))
++#define DO_GETXXKEY_R_KEYTYPE	const char *__restrict
++#define DO_GETXXKEY_R_PATHNAME  _PATH_PASSWD
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getpwuid.c b/libc/pwd_grp/getpwuid.c
+--- a/libc/pwd_grp/getpwuid.c
++++ b/libc/pwd_grp/getpwuid.c
+@@ -4,5 +4,9 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getpwuid
++#define GETXXKEY_FUNC		getpwuid
++#define GETXXKEY_ENTTYPE	struct passwd
++#define GETXXKEY_ADD_PARAMS	uid_t uid
++#define GETXXKEY_ADD_VARIABLES	uid
++#define GETXXKEY_BUFLEN		__UCLIBC_PWD_BUFFER_SIZE__
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getpwuid_r.c b/libc/pwd_grp/getpwuid_r.c
+--- a/libc/pwd_grp/getpwuid_r.c
++++ b/libc/pwd_grp/getpwuid_r.c
+@@ -4,5 +4,10 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getpwuid_r
++#define GETXXKEY_R_FUNC		getpwuid_r
++#define GETXXKEY_R_PARSER	__parsepwent
++#define GETXXKEY_R_ENTTYPE	struct passwd
++#define GETXXKEY_R_TEST(ENT)	((ENT)->pw_uid == key)
++#define DO_GETXXKEY_R_KEYTYPE	uid_t
++#define DO_GETXXKEY_R_PATHNAME  _PATH_PASSWD
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getspent.c b/libc/pwd_grp/getspent.c
+--- a/libc/pwd_grp/getspent.c
++++ b/libc/pwd_grp/getspent.c
+@@ -4,5 +4,8 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getspent
++#define GETXXKEY_FUNC		getspent
++#define GETXXKEY_ENTTYPE	struct spwd
++#define GETXXKEY_ADD_PARAMS	void
++#define GETXXKEY_BUFLEN		__UCLIBC_PWD_BUFFER_SIZE__
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getspnam.c b/libc/pwd_grp/getspnam.c
+--- a/libc/pwd_grp/getspnam.c
++++ b/libc/pwd_grp/getspnam.c
+@@ -4,5 +4,9 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getspnam
++#define GETXXKEY_FUNC		getspnam
++#define GETXXKEY_ENTTYPE	struct spwd
++#define GETXXKEY_ADD_PARAMS	const char *name
++#define GETXXKEY_ADD_VARIABLES	name
++#define GETXXKEY_BUFLEN		__UCLIBC_PWD_BUFFER_SIZE__
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/getspnam_r.c b/libc/pwd_grp/getspnam_r.c
+--- a/libc/pwd_grp/getspnam_r.c
++++ b/libc/pwd_grp/getspnam_r.c
+@@ -4,5 +4,10 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_getspnam_r
++#define GETXXKEY_R_FUNC		getspnam_r
++#define GETXXKEY_R_PARSER	__parsespent
++#define GETXXKEY_R_ENTTYPE	struct spwd
++#define GETXXKEY_R_TEST(ENT)	(!strcmp((ENT)->sp_namp, key))
++#define DO_GETXXKEY_R_KEYTYPE	const char *__restrict
++#define DO_GETXXKEY_R_PATHNAME  _PATH_SHADOW
+ #include "pwd_grp.c"
+diff --git a/libc/pwd_grp/pwd_grp.c b/libc/pwd_grp/pwd_grp.c
+--- a/libc/pwd_grp/pwd_grp.c
++++ b/libc/pwd_grp/pwd_grp.c
+@@ -127,59 +127,6 @@ libc_hidden_def(fgetspent_r)
+ 
+ #endif
+ /**********************************************************************/
+-/* For the various fget??ent funcs, return NULL on failure and a
+- * pointer to the appropriate struct (statically allocated) on success.
+- */
+-/**********************************************************************/
+-#ifdef L_fgetpwent
+-
+-#ifdef __USE_SVID
+-
+-struct passwd *fgetpwent(FILE *stream)
+-{
+-	static char buffer[__UCLIBC_PWD_BUFFER_SIZE__];
+-	static struct passwd resultbuf;
+-	struct passwd *result;
+-
+-	fgetpwent_r(stream, &resultbuf, buffer, sizeof(buffer), &result);
+-	return result;
+-}
+-#endif
+-
+-#endif
+-/**********************************************************************/
+-#ifdef L_fgetgrent
+-
+-#ifdef __USE_SVID
+-
+-struct group *fgetgrent(FILE *stream)
+-{
+-	static char buffer[__UCLIBC_GRP_BUFFER_SIZE__];
+-	static struct group resultbuf;
+-	struct group *result;
+-
+-	fgetgrent_r(stream, &resultbuf, buffer, sizeof(buffer), &result);
+-	return result;
+-}
+-#endif
+-
+-#endif
+-/**********************************************************************/
+-#ifdef L_fgetspent
+-
+-
+-struct spwd *fgetspent(FILE *stream)
+-{
+-	static char buffer[__UCLIBC_PWD_BUFFER_SIZE__];
+-	static struct spwd resultbuf;
+-	struct spwd *result;
+-
+-	fgetspent_r(stream, &resultbuf, buffer, sizeof(buffer), &result);
+-	return result;
+-}
+-
+-#endif
+-/**********************************************************************/
+ #ifdef L_sgetspent_r
+ 
+ int sgetspent_r(const char *string, struct spwd *result_buf,
+@@ -213,92 +160,6 @@ libc_hidden_def(sgetspent_r)
+ 
+ #endif
+ /**********************************************************************/
+-
+-#ifdef GETXXKEY_R_FUNC
+-#error GETXXKEY_R_FUNC is already defined!
+-#endif
+-
+-#ifdef L_getpwnam_r
+-#define GETXXKEY_R_FUNC		getpwnam_r
+-#define GETXXKEY_R_PARSER	__parsepwent
+-#define GETXXKEY_R_ENTTYPE	struct passwd
+-#define GETXXKEY_R_TEST(ENT)	(!strcmp((ENT)->pw_name, key))
+-#define DO_GETXXKEY_R_KEYTYPE	const char *__restrict
+-#define DO_GETXXKEY_R_PATHNAME  _PATH_PASSWD
+-#include "pwd_grp_internal.c"
+-#endif
+-
+-#ifdef L_getgrnam_r
+-#define GETXXKEY_R_FUNC		getgrnam_r
+-#define GETXXKEY_R_PARSER	__parsegrent
+-#define GETXXKEY_R_ENTTYPE	struct group
+-#define GETXXKEY_R_TEST(ENT)	(!strcmp((ENT)->gr_name, key))
+-#define DO_GETXXKEY_R_KEYTYPE	const char *__restrict
+-#define DO_GETXXKEY_R_PATHNAME  _PATH_GROUP
+-#include "pwd_grp_internal.c"
+-#endif
+-
+-#ifdef L_getspnam_r
+-#define GETXXKEY_R_FUNC		getspnam_r
+-#define GETXXKEY_R_PARSER	__parsespent
+-#define GETXXKEY_R_ENTTYPE	struct spwd
+-#define GETXXKEY_R_TEST(ENT)	(!strcmp((ENT)->sp_namp, key))
+-#define DO_GETXXKEY_R_KEYTYPE	const char *__restrict
+-#define DO_GETXXKEY_R_PATHNAME  _PATH_SHADOW
+-#include "pwd_grp_internal.c"
+-#endif
+-
+-#ifdef L_getpwuid_r
+-#define GETXXKEY_R_FUNC		getpwuid_r
+-#define GETXXKEY_R_PARSER	__parsepwent
+-#define GETXXKEY_R_ENTTYPE	struct passwd
+-#define GETXXKEY_R_TEST(ENT)	((ENT)->pw_uid == key)
+-#define DO_GETXXKEY_R_KEYTYPE	uid_t
+-#define DO_GETXXKEY_R_PATHNAME  _PATH_PASSWD
+-#include "pwd_grp_internal.c"
+-#endif
+-
+-#ifdef L_getgrgid_r
+-#define GETXXKEY_R_FUNC		getgrgid_r
+-#define GETXXKEY_R_PARSER	__parsegrent
+-#define GETXXKEY_R_ENTTYPE	struct group
+-#define GETXXKEY_R_TEST(ENT)	((ENT)->gr_gid == key)
+-#define DO_GETXXKEY_R_KEYTYPE	gid_t
+-#define DO_GETXXKEY_R_PATHNAME  _PATH_GROUP
+-#include "pwd_grp_internal.c"
+-#endif
+-
+-/**********************************************************************/
+-#ifdef L_getpwuid
+-
+-
+-struct passwd *getpwuid(uid_t uid)
+-{
+-	static char buffer[__UCLIBC_PWD_BUFFER_SIZE__];
+-	static struct passwd resultbuf;
+-	struct passwd *result;
+-
+-	getpwuid_r(uid, &resultbuf, buffer, sizeof(buffer), &result);
+-	return result;
+-}
+-
+-#endif
+-/**********************************************************************/
+-#ifdef L_getgrgid
+-
+-
+-struct group *getgrgid(gid_t gid)
+-{
+-	static char buffer[__UCLIBC_GRP_BUFFER_SIZE__];
+-	static struct group resultbuf;
+-	struct group *result;
+-
+-	getgrgid_r(gid, &resultbuf, buffer, sizeof(buffer), &result);
+-	return result;
+-}
+-
+-#endif
+-/**********************************************************************/
+ #ifdef L_getspuid_r
+ 
+ /* This function is non-standard and is currently not built.  It seems
+@@ -325,69 +186,6 @@ int getspuid_r(uid_t uid, struct spwd *__restrict resultbuf,
+ 
+ #endif
+ /**********************************************************************/
+-#ifdef L_getspuid
+-
+-/* This function is non-standard and is currently not built.
+- * Why it was added, I do not know. */
+-
+-struct spwd *getspuid(uid_t uid)
+-{
+-	static char buffer[__UCLIBC_PWD_BUFFER_SIZE__];
+-	static struct spwd resultbuf;
+-	struct spwd *result;
+-
+-	getspuid_r(uid, &resultbuf, buffer, sizeof(buffer), &result);
+-	return result;
+-}
+-
+-#endif
+-/**********************************************************************/
+-#ifdef L_getpwnam
+-
+-
+-struct passwd *getpwnam(const char *name)
+-{
+-	static char buffer[__UCLIBC_PWD_BUFFER_SIZE__];
+-	static struct passwd resultbuf;
+-	struct passwd *result;
+-
+-	getpwnam_r(name, &resultbuf, buffer, sizeof(buffer), &result);
+-	return result;
+-}
+-libc_hidden_def(getpwnam)
+-
+-#endif
+-/**********************************************************************/
+-#ifdef L_getgrnam
+-
+-
+-struct group *getgrnam(const char *name)
+-{
+-	static char buffer[__UCLIBC_GRP_BUFFER_SIZE__];
+-	static struct group resultbuf;
+-	struct group *result;
+-
+-	getgrnam_r(name, &resultbuf, buffer, sizeof(buffer), &result);
+-	return result;
+-}
+-
+-#endif
+-/**********************************************************************/
+-#ifdef L_getspnam
+-
+-
+-struct spwd *getspnam(const char *name)
+-{
+-	static char buffer[__UCLIBC_PWD_BUFFER_SIZE__];
+-	static struct spwd resultbuf;
+-	struct spwd *result;
+-
+-	getspnam_r(name, &resultbuf, buffer, sizeof(buffer), &result);
+-	return result;
+-}
+-
+-#endif
+-/**********************************************************************/
+ #ifdef L_getpw
+ 
+ 
+@@ -585,65 +383,14 @@ libc_hidden_def(getspent_r)
+ 
+ #endif
+ /**********************************************************************/
+-#ifdef L_getpwent
+-
+-
+-struct passwd *getpwent(void)
+-{
+-	static char line_buff[__UCLIBC_PWD_BUFFER_SIZE__];
+-	static struct passwd pwd;
+-	struct passwd *result;
+-
+-	getpwent_r(&pwd, line_buff, sizeof(line_buff), &result);
+-	return result;
+-}
+-
+-#endif
+-/**********************************************************************/
+-#ifdef L_getgrent
+-
+-
+-struct group *getgrent(void)
+-{
+-	static char line_buff[__UCLIBC_GRP_BUFFER_SIZE__];
+-	static struct group gr;
+-	struct group *result;
+-
+-	getgrent_r(&gr, line_buff, sizeof(line_buff), &result);
+-	return result;
+-}
+-
+-#endif
++/* For the various fget??ent funcs, return NULL on failure and a
++ * pointer to the appropriate struct (statically allocated) on success.
++ */
+ /**********************************************************************/
+-#ifdef L_getspent
+-
+-
+-struct spwd *getspent(void)
+-{
+-	static char line_buff[__UCLIBC_PWD_BUFFER_SIZE__];
+-	static struct spwd spwd;
+-	struct spwd *result;
+-
+-	getspent_r(&spwd, line_buff, sizeof(line_buff), &result);
+-	return result;
+-}
+-
++#if defined(GETXXKEY_FUNC) || defined(GETXXKEY_R_FUNC)
++#include "pwd_grp_internal.c"
+ #endif
+-/**********************************************************************/
+-#ifdef L_sgetspent
+-
+-
+-struct spwd *sgetspent(const char *string)
+-{
+-	static char line_buff[__UCLIBC_PWD_BUFFER_SIZE__];
+-	static struct spwd spwd;
+-	struct spwd *result;
+-
+-	sgetspent_r(string, &spwd, line_buff, sizeof(line_buff), &result);
+-	return result;
+-}
+ 
+-#endif
+ /**********************************************************************/
+ #ifdef L___getgrouplist_internal
+ 
+diff --git a/libc/pwd_grp/pwd_grp_internal.c b/libc/pwd_grp/pwd_grp_internal.c
+--- a/libc/pwd_grp/pwd_grp_internal.c
++++ b/libc/pwd_grp/pwd_grp_internal.c
+@@ -39,18 +39,10 @@
+ #endif
+ 
+ /**********************************************************************/
+-/* Sizes for statically allocated buffers. */
+-
+-/* If you change these values, also change _SC_GETPW_R_SIZE_MAX and
+- * _SC_GETGR_R_SIZE_MAX in libc/unistd/sysconf.c to match */
+-#define PWD_BUFFER_SIZE 256
+-#define GRP_BUFFER_SIZE 256
+-
+-/**********************************************************************/
+ /* Prototypes for internal functions. */
+ 
+-#ifndef GETXXKEY_R_FUNC
+-#error GETXXKEY_R_FUNC is not defined!
++#if !defined(GETXXKEY_R_FUNC) && !defined(GETXXKEY_FUNC)
++#error GETXXKEY_R_FUNC/GETXXKEY_FUNC are not defined!
+ #endif
+ /**********************************************************************/
+ #ifdef GETXXKEY_R_FUNC
+@@ -92,9 +84,44 @@ int GETXXKEY_R_FUNC(DO_GETXXKEY_R_KEYTYPE key,
+ }
+ libc_hidden_def(GETXXKEY_R_FUNC)
+ 
++#endif /* GETXXKEY_R_FUNC */
++
++/**********************************************************************/
++#ifdef GETXXKEY_FUNC
++
++#define REENTRANT_NAME APPEND_R(GETXXKEY_FUNC)
++#define APPEND_R(name) APPEND_R1(name)
++#define APPEND_R1(name) name##_r
++
++GETXXKEY_ENTTYPE *GETXXKEY_FUNC(GETXXKEY_ADD_PARAMS)
++{
++	static char buffer[GETXXKEY_BUFLEN];
++	static GETXXKEY_ENTTYPE resultbuf;
++	GETXXKEY_ENTTYPE *result;
++
++# ifdef GETXXKEY_ADD_VARIABLES
++	REENTRANT_NAME(GETXXKEY_ADD_VARIABLES, &resultbuf, buffer, sizeof(buffer), &result);
++# else
++	REENTRANT_NAME(&resultbuf, buffer, sizeof(buffer), &result);
++# endif
++	return result;
++}
++#ifdef GETXXKEY_FUNC_HIDDEN
++libc_hidden_def(GETXXKEY_FUNC)
+ #endif
++
++#undef REENTRANT_NAME
++#undef APPEND_R
++#undef APPEND_R1
++#endif /* GETXXKEY_FUNC */
++
+ /**********************************************************************/
+-#undef GETXXKEY_R_FUNC_HIDDEN
++#undef GETXXKEY_FUNC
++#undef GETXXKEY_ENTTYPE
++#undef GETXXKEY_BUFLEN
++#undef GETXXKEY_FUNC_HIDDEN
++#undef GETXXKEY_ADD_PARAMS
++#undef GETXXKEY_ADD_VARIABLES
+ #undef GETXXKEY_R_FUNC
+ #undef GETXXKEY_R_PARSER
+ #undef GETXXKEY_R_ENTTYPE
+diff --git a/libc/pwd_grp/sgetspent.c b/libc/pwd_grp/sgetspent.c
+--- a/libc/pwd_grp/sgetspent.c
++++ b/libc/pwd_grp/sgetspent.c
+@@ -4,5 +4,9 @@
+  * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
+  */
+ 
+-#define L_sgetspent
++#define GETXXKEY_FUNC		sgetspent
++#define GETXXKEY_ENTTYPE	struct spwd
++#define GETXXKEY_ADD_PARAMS	const char *string
++#define GETXXKEY_ADD_VARIABLES	string
++#define GETXXKEY_BUFLEN		__UCLIBC_PWD_BUFFER_SIZE__
+ #include "pwd_grp.c"
