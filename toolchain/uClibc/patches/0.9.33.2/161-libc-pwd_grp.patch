@@ -7,6 +7,17 @@ Subject: lckpwdf.c: add back lost return
 
 Signed-off-by: Peter S. Mazinger <ps.m@gmx.net>
 Signed-off-by: Bernhard Reutner-Fischer <rep.dot.nop@gmail.com>
+
+---
+From eb82a48383183610eea095c17446f596319492ec
+From: "Peter S. Mazinger" <ps.m@gmx.net>
+Date: Sat, 19 Mar 2011 00:38:04 +0100
+Subject: pwd_grp_internal.c: do not include pthread.h
+
+stdio.h provides __STDIO* locking related macros
+
+Signed-off-by: Peter S. Mazinger <ps.m@gmx.net>
+Signed-off-by: Bernhard Reutner-Fischer <rep.dot.nop@gmail.com>
 ---
 
 diff --git a/libc/pwd_grp/lckpwdf.c b/libc/pwd_grp/lckpwdf.c
@@ -35,5 +46,17 @@ diff --git a/libc/pwd_grp/lckpwdf.c b/libc/pwd_grp/lckpwdf.c
  }
  
  
+diff --git a/libc/pwd_grp/pwd_grp_internal.c b/libc/pwd_grp/pwd_grp_internal.c
+--- a/libc/pwd_grp/pwd_grp_internal.c
++++ b/libc/pwd_grp/pwd_grp_internal.c
+@@ -34,9 +34,6 @@
+ #ifdef __UCLIBC_HAS_SHADOW__
+ #include <shadow.h>
+ #endif
+-#ifdef __UCLIBC_HAS_THREADS__
+-#include <pthread.h>
+-#endif
+ 
+ /**********************************************************************/
+ /* Sizes for statically allocated buffers. */
 --
-cgit v0.9.0.1-2-gef13
