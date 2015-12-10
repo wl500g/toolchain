@@ -1,4 +1,4 @@
-[PATCH] resolv: fix gethostbyname2_r to match gethostbyname_r, fixing bugs with AAAA lookups
+resolv: fix gethostbyname2_r to match gethostbyname_r, fixing bugs with AAAA lookups
 
 
 The latter half of gethostbyname2_r (doing AAAA queries) is rather dramatically different
@@ -18,8 +18,8 @@ extra bits that actually belong in there (eg #ifdef __UCLIBC_HAS_IPV6__).
 Signed-off-by: Wes Campaigne <westacular at gmail.com>
 
 ---
- libc/inet/resolv.c |  166 +++++++++++++++++++++++++++++++++-------------------
- 1 files changed, 105 insertions(+), 61 deletions(-)
+ libc/inet/resolv.c |  165 +++++++++++++++++++++++++++++++++--------------------
+ 1 file changed, 105 insertions(+), 60 deletions(-)
 
 diff --git a/libc/inet/resolv.c b/libc/inet/resolv.c
 --- a/libc/inet/resolv.c
@@ -40,20 +40,18 @@ diff --git a/libc/inet/resolv.c b/libc/inet/resolv.c
  	int wrong_af = 0;
  
  	if (family == AF_INET)
-@@ -2213,10 +2214,9 @@ int gethostbyname2_r(const char *name,
+@@ -2213,9 +2214,8 @@ int gethostbyname2_r(const char *name,
  
  	/* do /etc/hosts first */
  	{
 -		int old_errno = errno;	/* Save the old errno and reset errno */
 -		__set_errno(0);			/* to check for missing /etc/hosts. */
 -
--		i = __get_hosts_byname_r(name, AF_INET6 /*family*/, result_buf,
 +		int old_errno = errno;  /* save the old errno and reset errno */
 +		__set_errno(0);         /* to check for missing /etc/hosts. */
-+		i = __get_hosts_byname_r(name, AF_INET6, result_buf,
+ 		i = __get_hosts_byname_r(name, AF_INET6 /*family*/, result_buf,
  				buf, buflen, result, h_errnop);
  		if (i == NETDB_SUCCESS) {
- 			__set_errno(old_errno);
 @@ -2237,42 +2237,58 @@ int gethostbyname2_r(const char *name,
  		}
  		__set_errno(old_errno);
@@ -135,7 +133,7 @@ diff --git a/libc/inet/resolv.c b/libc/inet/resolv.c
  	}
  
  	/* what if /etc/hosts has it but it's not IPv6?
-@@ -2284,51 +2300,79 @@ int gethostbyname2_r(const char *name,
+@@ -2284,51 +2300,80 @@ int gethostbyname2_r(const char *name,
  	}
  
  	/* talk to DNS servers */
@@ -238,6 +236,7 @@ diff --git a/libc/inet/resolv.c b/libc/inet/resolv.c
 +
  	*h_errnop = HOST_NOT_FOUND;
 -	return TRY_AGAIN;
++	__set_h_errno(HOST_NOT_FOUND);
 +	i = TRY_AGAIN;
  
 + free_and_ret:
