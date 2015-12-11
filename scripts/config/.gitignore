@@ -2,4 +2,6 @@
 conf
 mconf
 mconf_check
-*.*.c
+zconf.hash.c
+zconf.lex.c
+zconf.tab.c

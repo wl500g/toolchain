@@ -85,12 +85,12 @@ config BUILD_DEVELOPER_SYSTEM
 
 source "toolchain/Config.in"
 menuconfig BUILDSYSTEM_SETTINGS
-    bool "Buildsystem settings" 
+    bool "Buildsystem settings"
 
 config DOWNLOAD_FOLDER
 	string
 	prompt "Download folder"
 	default ""
-	depends BUILDSYSTEM_SETTINGS 
+	depends on BUILDSYSTEM_SETTINGS
 
 #source "target/sdk/Config.in"

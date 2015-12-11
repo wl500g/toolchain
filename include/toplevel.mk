@@ -58,10 +58,16 @@ config-clean: FORCE
 
 defconfig: scripts/config/conf prepare-tmpinfo FORCE
 	touch .config
-	$< -D .config Config.in
+	@if [ -e defconfig ]; then cp defconfig .config; fi
+	$< --defconfig=.config Config.in
+
+confdefault-y=allyes
+confdefault-m=allmod
+confdefault-n=allno
+confdefault:=$(confdefault-$(CONFDEFAULT))
 
 oldconfig: scripts/config/conf prepare-tmpinfo FORCE
-	$< -$(if $(CONFDEFAULT),$(CONFDEFAULT),o) Config.in
+	$< --$(if $(confdefault),$(confdefault),old)config Config.in
 
 menuconfig: scripts/config/mconf prepare-tmpinfo FORCE
 	if [ \! -f .config -a -e defconfig ]; then \
@@ -99,7 +105,7 @@ prereq:: prepare-tmpinfo .config
 	@+$(PREP_MK) $(NO_TRACE_MAKE) -r -s prereq
 	@( \
 		cp .config tmp/.config; \
-		./scripts/config/conf -D tmp/.config -w tmp/.config Config.in > /dev/null 2>&1; \
+		./scripts/config/conf --defconfig=tmp/.config -w tmp/.config Config.in > /dev/null 2>&1; \
 		if ./scripts/kconfig.pl '>' .config tmp/.config | grep -q CONFIG; then \
 			echo "WARNING: your configuration is out of sync. Please run make menuconfig, oldconfig or defconfig!"; \
 		fi \

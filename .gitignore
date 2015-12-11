@@ -1,3 +1,6 @@
+*.orig
+*.bak
+*.rej
 .config
 .config.old
 build_dir

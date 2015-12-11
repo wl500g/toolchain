@@ -16,7 +16,7 @@ endchoice
 
 config EABI_SUPPORT
 	bool
-	depends arm||armeb
+	depends on arm||armeb
 	prompt "Enable EABI support"
 	default n
 	help
