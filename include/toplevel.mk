@@ -96,7 +96,14 @@ prereq:: prepare-tmpinfo .config
 	@+$(NO_TRACE_MAKE) -r -s $@
 
 %::
-	@+$(PREP_MK) $(NO_TRACE_MAKE) -s prereq
+	@+$(PREP_MK) $(NO_TRACE_MAKE) -r -s prereq
+	@( \
+		cp .config tmp/.config; \
+		./scripts/config/conf -D tmp/.config -w tmp/.config Config.in > /dev/null 2>&1; \
+		if ./scripts/kconfig.pl '>' .config tmp/.config | grep -q CONFIG; then \
+			echo "WARNING: your configuration is out of sync. Please run make menuconfig, oldconfig or defconfig!"; \
+		fi \
+	)
 	@+$(SUBMAKE) -r $@
 
 help:
@@ -117,4 +124,3 @@ ifeq ($(findstring v,$(DEBUG)),)
 endif
 .PHONY: help FORCE
 .NOTPARALLEL:
-
