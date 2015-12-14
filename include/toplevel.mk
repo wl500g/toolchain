@@ -17,7 +17,7 @@ export TOOLCHAINVERSION
 export IS_TTY=$(shell tty -s && echo 1 || echo 0)
 
 ifeq ($(FORCE),)
-  .config scripts/config/conf scripts/config/mconf: tmp/.prereq-build
+  .config scripts/config/conf scripts/config/mconf: staging_dir/host/.prereq-build
 endif
 
 prepare-mk: FORCE ;
@@ -67,24 +67,25 @@ kernel_oldconfig: .config FORCE
 kernel_menuconfig: .config FORCE
 	$(NO_TRACE_MAKE) -C target/linux menuconfig
 
-tmp/.prereq-build: include/prereq-build.mk
+staging_dir/host/.prereq-build: include/prereq-build.mk
 	mkdir -p tmp
 	rm -f tmp/.host.mk
 	@$(_SINGLE)$(NO_TRACE_MAKE) -j1 -r -s -f $(TOPDIR)/include/prereq-build.mk prereq 2>/dev/null || { \
 		echo "Prerequisite check failed. Use CHECK_<tool>=0 to override."; \
 		false; \
 	}
+	mkdir -p staging_dir/host
 	touch $@
 
 download: .config FORCE
 	@+$(SUBMAKE) tools/download
 	@+$(SUBMAKE) toolchain/download
 
-clean dirclean: .config
+clean dirclean: config-clean
 	@+$(SUBMAKE) -r $@ 
 
 prereq:: .config
-	@+$(MAKE) -r -s tmp/.prereq-build $(PREP_MK)
+	@+$(MAKE) -r -s staging_dir/host/.prereq-build $(PREP_MK)
 	@+$(NO_TRACE_MAKE) -r -s $@
 
 %::
@@ -101,18 +102,11 @@ prereq:: .config
 help:
 	cat README
 
-docs docs/compile: FORCE
-	@$(_SINGLE)$(SUBMAKE) -j1 -C docs compile
-
-docs/clean: FORCE
-	@$(_SINGLE)$(SUBMAKE) -j1 -C docs clean
-
-distclean:
+distclean: clean
 	rm -rf tmp build_dir staging_dir dl .config* feeds bin
-	@$(SUBMAKE) -j1 -C scripts/config clean
 
 ifeq ($(findstring v,$(DEBUG)),)
-  .SILENT: symlinkclean clean dirclean distclean config-clean download help tmpinfo-clean .config scripts/config/mconf scripts/config/conf menuconfig tmp/.prereq-build tmp/.prereq-package
+  .SILENT: symlinkclean clean dirclean distclean config-clean download help tmpinfo-clean .config scripts/config/mconf scripts/config/conf menuconfig staging_dir/host/.prereq-build tmp/.prereq-package
 endif
 .PHONY: help FORCE
 .NOTPARALLEL:
