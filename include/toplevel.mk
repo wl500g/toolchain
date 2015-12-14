@@ -20,23 +20,9 @@ ifeq ($(FORCE),)
   .config scripts/config/conf scripts/config/mconf: tmp/.prereq-build
 endif
 
-SCAN_COOKIE?=$(shell echo $$$$)
-export SCAN_COOKIE
-
 prepare-mk: FORCE ;
 
-prepare-tmpinfo: FORCE
-	mkdir -p tmp/info
-#	$(_SINGLE)$(NO_TRACE_MAKE) -j1 -r -s -f include/scan.mk SCAN_TARGET="packageinfo" SCAN_DIR="package" SCAN_NAME="package" SCAN_DEPS="$(TOPDIR)/include/package*.mk" SCAN_DEPTH=5 SCAN_EXTRA=""
-#	$(_SINGLE)$(NO_TRACE_MAKE) -j1 -r -s -f include/scan.mk SCAN_TARGET="targetinfo" SCAN_DIR="target/linux" SCAN_NAME="target" SCAN_DEPS="profiles/*.mk $(TOPDIR)/include/kernel*.mk $(TOPDIR)/include/target.mk" SCAN_DEPTH=2 SCAN_EXTRA="" SCAN_MAKEOPTS="TARGET_BUILD=1"
-#	for type in package target; do \
-#		f=tmp/.$${type}info; t=tmp/.config-$${type}.in; \
-#		[ "$$t" -nt "$$f" ] || ./scripts/metadata.pl $${type}_config "$$f" > "$$t" || { rm -f "$$t"; echo "Failed to build $$t"; false; break; }; \
-#	done
-#	./scripts/metadata.pl package_mk tmp/.packageinfo > tmp/.packagedeps || { rm -f tmp/.packagedeps; false; }
-	touch $(TOPDIR)/tmp/.build
-
-.config: ./scripts/config/conf $(if $(CONFIG_HAVE_DOT_CONFIG),,prepare-tmpinfo)
+.config: ./scripts/config/conf
 	@+if [ \! -f .config ] || ! grep CONFIG_HAVE_DOT_CONFIG .config >/dev/null; then \
 		[ -e defconfig ] && cp defconfig .config; \
 		$(NO_TRACE_MAKE) menuconfig $(PREP_MK); \
@@ -50,13 +36,13 @@ $(eval $(call rdep,scripts/config,scripts/config/mconf))
 scripts/config/conf:
 	@$(SUBMAKE) -s -j1 -C scripts/config conf
 
-config: scripts/config/conf prepare-tmpinfo FORCE
+config: scripts/config/conf FORCE
 	$< Config.in
 
 config-clean: FORCE
 	$(NO_TRACE_MAKE) -C scripts/config clean
 
-defconfig: scripts/config/conf prepare-tmpinfo FORCE
+defconfig: scripts/config/conf FORCE
 	touch .config
 	@if [ -e defconfig ]; then cp defconfig .config; fi
 	$< --defconfig=.config Config.in
@@ -66,10 +52,10 @@ confdefault-m=allmod
 confdefault-n=allno
 confdefault:=$(confdefault-$(CONFDEFAULT))
 
-oldconfig: scripts/config/conf prepare-tmpinfo FORCE
+oldconfig: scripts/config/conf FORCE
 	$< --$(if $(confdefault),$(confdefault),old)config Config.in
 
-menuconfig: scripts/config/mconf prepare-tmpinfo FORCE
+menuconfig: scripts/config/mconf FORCE
 	if [ \! -f .config -a -e defconfig ]; then \
 		cp defconfig .config; \
 	fi
@@ -97,7 +83,7 @@ download: .config FORCE
 clean dirclean: .config
 	@+$(SUBMAKE) -r $@ 
 
-prereq:: prepare-tmpinfo .config
+prereq:: .config
 	@+$(MAKE) -r -s tmp/.prereq-build $(PREP_MK)
 	@+$(NO_TRACE_MAKE) -r -s $@
 
@@ -126,7 +112,7 @@ distclean:
 	@$(SUBMAKE) -j1 -C scripts/config clean
 
 ifeq ($(findstring v,$(DEBUG)),)
-  .SILENT: symlinkclean clean dirclean distclean config-clean download help tmpinfo-clean .config scripts/config/mconf scripts/config/conf menuconfig tmp/.prereq-build tmp/.prereq-package prepare-tmpinfo
+  .SILENT: symlinkclean clean dirclean distclean config-clean download help tmpinfo-clean .config scripts/config/mconf scripts/config/conf menuconfig tmp/.prereq-build tmp/.prereq-package
 endif
 .PHONY: help FORCE
 .NOTPARALLEL:

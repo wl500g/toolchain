@@ -22,7 +22,7 @@ $(curdir)/mpfr/compile := $(curdir)/gmp/install
 $(curdir)/mpc/compile := $(curdir)/mpfr/install $(curdir)/gmp/install
 
 # preparatory work
-$(STAGING_DIR)/.prepared: $(TMP_DIR)/.build
+$(STAGING_DIR)/.prepared:
 	@for dir in $(STAGING_DIR) $(STAGING_DIR_HOST); do ( \
 		set -x; \
 		mkdir -p "$$dir"; \
