@@ -8,11 +8,10 @@ Fix sigaction static linking against libpthread
 diff --git a/include/signal.h b/include/signal.h
 --- a/include/signal.h
 +++ b/include/signal.h
-@@ -290,7 +290,28 @@ libc_hidden_proto(sigsuspend)
- /* Get and/or set the action for signal SIG.  */
+@@ -290,6 +290,25 @@ libc_hidden_proto(sigsuspend)
  extern int sigaction (int __sig, __const struct sigaction *__restrict __act,
  		      struct sigaction *__restrict __oact) __THROW;
-+#ifdef _LIBC
+ #ifdef _LIBC
 +# if 0 /* this is in headers */
 +/* In uclibc, userspace struct sigaction is identical to
 + * "new" struct kernel_sigaction (one from the Linux 2.1.68 kernel).
@@ -33,10 +32,8 @@ diff --git a/include/signal.h b/include/signal.h
 +	;
 +extern __typeof(sigaction) __libc_sigaction;
  libc_hidden_proto(sigaction)
-+#endif
  
- /* Put in SET all signals that are blocked and waiting to be delivered.  */
- extern int sigpending (sigset_t *__set) __THROW __nonnull ((1));
+ # ifdef __mips__
 diff --git a/libc/signal/sigaction.c b/libc/signal/sigaction.c
 --- a/libc/signal/sigaction.c
 +++ b/libc/signal/sigaction.c

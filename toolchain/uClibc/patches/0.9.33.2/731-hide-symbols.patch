@@ -19,7 +19,6 @@ hide internal symbols
  f503f6a9 getpt.c: no need for hidden posix_openpt
  daace916 syslog.c: no need for hidden vsyslog, use a static __vsyslog instead
  cef1f951 no need for hidden __sigpause, use an internal static function
- 06419c7f ppoll: no need for hidden version
  d5f8c6dd brk.c: remove libc_hidden_proto, always_inline syscall
 
 ---
@@ -881,34 +880,6 @@ diff --git a/libc/sysdeps/linux/common/getpagesize.c b/libc/sysdeps/linux/common
  /* Return the system page size.  */
  /* couldn't make __getpagesize hidden, because shm.h uses it in a macro */
  extern __typeof(getpagesize) __getpagesize;
-diff --git a/libc/sysdeps/linux/common/ppoll.c b/libc/sysdeps/linux/common/ppoll.c
---- a/libc/sysdeps/linux/common/ppoll.c
-+++ b/libc/sysdeps/linux/common/ppoll.c
-@@ -17,13 +17,13 @@
-    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
-    02111-1307 USA.  */
- 
--#include <signal.h>
- #include <sys/syscall.h>
--#include <sys/poll.h>
--#define __need_NULL
--#include <stddef.h>
- 
--#if defined __NR_ppoll && defined __UCLIBC_LINUX_SPECIFIC__
-+#if defined __NR_ppoll && defined __UCLIBC_LINUX_SPECIFIC__ && defined __USE_GNU
-+# define __need_NULL
-+# include <stddef.h>
-+# include <signal.h>
-+# include <sys/poll.h>
- # ifdef __UCLIBC_HAS_THREADS_NATIVE__
- #  include <sysdep-cancel.h>
- # else
-@@ -51,5 +51,4 @@ ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout,
- 	return result;
- # endif
- }
--libc_hidden_def(ppoll)
- #endif
 diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/sigtimedwait.c b/libpthread/nptl/sysdeps/unix/sysv/linux/sigtimedwait.c
 --- a/libpthread/nptl/sysdeps/unix/sysv/linux/sigtimedwait.c
 +++ b/libpthread/nptl/sysdeps/unix/sysv/linux/sigtimedwait.c

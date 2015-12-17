@@ -1,0 +1,962 @@
+libc: use cancel.h
+
+ 6c7c4fb8 select: adapt cancelation to use cancel.h
+ d3b81557 nanosleep.c: use cancel.h
+ 2c917b03 adapt fdatasync, fsync, msync to use cancel.h
+ 6b3453a6 poll.c: do not inline syscall
+ 06419c7f ppoll: no need for hidden version
+ 145ad1d9 poll, ppoll: use cancel.h
+ 9df9c60a add cancellation for read, write, close
+ 551ca528 pselect.c: avoid handling cancellation twice
+ f74f77b1 fcntl: add cancellation to fcntl64, use cancel.h
+ 29f2e0cd sigsuspend.c: make build fail, if rt_sigsuspend is not available and NPTL is defined
+ fae8e7e4 sigsuspend.c: add cancellation support independently of rt_sigsuspend
+
+diff --git a/include/fcntl.h b/include/fcntl.h
+--- a/include/fcntl.h
++++ b/include/fcntl.h
+@@ -75,7 +75,10 @@ __BEGIN_DECLS
+    __THROW.  */
+ #if !defined(__USE_FILE_OFFSET64) || defined(__LP64__)
+ extern int fcntl (int __fd, int __cmd, ...);
++# ifdef _LIBC
++extern int __fcntl_nocancel(int, int, long) attribute_hidden;
+ libc_hidden_proto(fcntl)
++# endif
+ #else
+ # ifdef __REDIRECT
+ extern int __REDIRECT (fcntl, (int __fd, int __cmd, ...), fcntl64);
+@@ -85,7 +88,10 @@ extern int __REDIRECT (fcntl, (int __fd, int __cmd, ...), fcntl64);
+ #endif
+ #if defined(__USE_LARGEFILE64) && !defined(__LP64__)
+ extern int fcntl64 (int __fd, int __cmd, ...);
++# ifdef _LIBC
++extern int __fcntl64_nocancel(int, int, long) attribute_hidden;
+ libc_hidden_proto(fcntl64)
++# endif
+ #endif
+ 
+ /* Open FILE and return a new file descriptor for it, or -1 on error.
+@@ -236,11 +242,6 @@ extern int posix_fallocate64 (int __fd, __off64_t __offset, __off64_t __len);
+ # endif
+ #endif
+ 
+-#ifdef _LIBC
+-extern int __fcntl_nocancel (int fd, int cmd, ...);
+-libc_hidden_proto(__fcntl_nocancel)
+-#endif
+-
+ __END_DECLS
+ 
+ #endif /* fcntl.h  */
+diff --git a/include/signal.h b/include/signal.h
+--- a/include/signal.h
++++ b/include/signal.h
+@@ -299,7 +299,10 @@ libc_hidden_proto(sigprocmask)
+    This function is a cancellation point and therefore not marked with
+    __THROW.  */
+ extern int sigsuspend (__const sigset_t *__set) __nonnull ((1));
++#ifdef _LIBC
++extern __typeof(sigsuspend) __sigsuspend_nocancel attribute_hidden;
+ libc_hidden_proto(sigsuspend)
++#endif
+ 
+ /* Get and/or set the action for signal SIG.  */
+ extern int sigaction (int __sig, __const struct sigaction *__restrict __act,
+@@ -325,7 +328,19 @@ extern int __syscall_rt_sigaction(int, __const struct sigaction *,
+ /* Get and/or set the action for signal SIG.  */
+ extern int sigaction (int __sig, __const struct sigaction *__restrict __act,
+ 		      struct sigaction *__restrict __oact) __THROW;
++#ifdef _LIBC
+ libc_hidden_proto(sigaction)
++
++# ifdef __mips__
++#  define _KERNEL_NSIG_WORDS (_NSIG / _MIPS_SZLONG)
++typedef struct {
++	unsigned long sig[_KERNEL_NSIG_WORDS];
++} kernel_sigset_t;
++#  define __SYSCALL_SIGSET_T_SIZE (sizeof(kernel_sigset_t))
++# else
++#  define __SYSCALL_SIGSET_T_SIZE (_NSIG / 8)
++# endif
++#endif
+ 
+ /* Put in SET all signals that are blocked and waiting to be delivered.  */
+ extern int sigpending (sigset_t *__set) __THROW __nonnull ((1));
+diff --git a/include/sys/select.h b/include/sys/select.h
+--- a/include/sys/select.h
++++ b/include/sys/select.h
+@@ -110,7 +110,10 @@ extern int select (int __nfds, fd_set *__restrict __readfds,
+ 		   fd_set *__restrict __writefds,
+ 		   fd_set *__restrict __exceptfds,
+ 		   struct timeval *__restrict __timeout);
++#ifdef _LIBC
++extern __typeof(select) __select_nocancel attribute_hidden;
+ libc_hidden_proto(select)
++#endif
+ 
+ #ifdef __USE_XOPEN2K
+ /* Same as above only that the TIMEOUT value is given with higher
+diff --git a/include/unistd.h b/include/unistd.h
+--- a/include/unistd.h
++++ b/include/unistd.h
+@@ -354,7 +354,11 @@ libc_hidden_proto(lseek64)
+    This function is a cancellation point and therefore not marked with
+    __THROW.  */
+ extern int close (int __fd);
++#ifdef _LIBC
++extern __typeof(close) __close_nocancel attribute_hidden;
++extern void __close_nocancel_no_status(int) attribute_hidden;
+ libc_hidden_proto(close)
++#endif
+ 
+ /* Read NBYTES into BUF from FD.  Return the
+    number read, -1 for errors or 0 for EOF.
+@@ -362,14 +366,20 @@ libc_hidden_proto(close)
+    This function is a cancellation point and therefore not marked with
+    __THROW.  */
+ extern ssize_t read (int __fd, void *__buf, size_t __nbytes) __wur;
++#ifdef _LIBC
++extern __typeof(read) __read_nocancel attribute_hidden;
+ libc_hidden_proto(read)
++#endif
+ 
+ /* Write N bytes of BUF to FD.  Return the number written, or -1.
+ 
+    This function is a cancellation point and therefore not marked with
+    __THROW.  */
+ extern ssize_t write (int __fd, __const void *__buf, size_t __n) __wur;
++#ifdef _LIBC
++extern __typeof(write) __write_nocancel attribute_hidden;
+ libc_hidden_proto(write)
++#endif
+ 
+ #ifdef __USE_UNIX98
+ # ifndef __USE_FILE_OFFSET64
+diff --git a/libc/sysdeps/linux/common/__syscall_fcntl.c b/libc/sysdeps/linux/common/__syscall_fcntl.c
+--- a/libc/sysdeps/linux/common/__syscall_fcntl.c
++++ b/libc/sysdeps/linux/common/__syscall_fcntl.c
+@@ -10,82 +10,47 @@
+ 
+ #include <sys/syscall.h>
+ #include <stdarg.h>
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-#include <sysdep-cancel.h>	/* Must come before <fcntl.h>.  */
+-#endif
++#include <cancel.h>	/* Must come before <fcntl.h>.  */
+ #include <fcntl.h>
+ #include <bits/wordsize.h>
+ 
+-extern __typeof(fcntl) __libc_fcntl;
+-libc_hidden_proto(__libc_fcntl)
+-
+-int __fcntl_nocancel (int fd, int cmd, ...)
++int __NC(fcntl)(int fd, int cmd, long arg)
+ {
+-	va_list ap;
+-	void *arg;
+-
+-	va_start (ap, cmd);
+-	arg = va_arg (ap, void *);
+-	va_end (ap);
+-
+-# if __WORDSIZE == 32
++#if __WORDSIZE == 32
+ 	if (cmd == F_GETLK64 || cmd == F_SETLK64 || cmd == F_SETLKW64) {
+-#  if defined __UCLIBC_HAS_LFS__ && defined __NR_fcntl64
+-		return INLINE_SYSCALL (fcntl64, 3, fd, cmd, arg);
+-#  else
++# if defined __UCLIBC_HAS_LFS__ && defined __NR_fcntl64
++		return __NC(fcntl64)(fd, cmd, arg);
++# else
+ 		__set_errno(ENOSYS);
+ 		return -1;
+-#  endif
+-	}
+ # endif
+-	return INLINE_SYSCALL (fcntl, 3, fd, cmd, arg);
++	}
++#endif
++	return INLINE_SYSCALL(fcntl, 3, fd, cmd, arg);
+ }
+-libc_hidden_def(__fcntl_nocancel)
+ 
+-int __libc_fcntl (int fd, int cmd, ...)
++int fcntl(int fd, int cmd, ...)
+ {
+ 	va_list ap;
+-	void *arg;
++	long arg;
+ 
+ 	va_start (ap, cmd);
+-	arg = va_arg (ap, void *);
++	arg = va_arg (ap, long);
+ 	va_end (ap);
+ 
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+ 	if (SINGLE_THREAD_P || (cmd != F_SETLKW && cmd != F_SETLKW64))
+-# if defined __UCLIBC_HAS_LFS__ && defined __NR_fcntl64
+-		return INLINE_SYSCALL (fcntl64, 3, fd, cmd, arg);
+-# else
+-		return INLINE_SYSCALL (fcntl, 3, fd, cmd, arg);
+-# endif
+-
++		return __NC(fcntl)(fd, cmd, arg);
++#ifdef __NEW_THREADS
+ 	int oldtype = LIBC_CANCEL_ASYNC ();
+-
+-# if defined __UCLIBC_HAS_LFS__ && defined __NR_fcntl64
+-	int result = INLINE_SYSCALL (fcntl64, 3, fd, cmd, arg);
+-# else
+-	int result = INLINE_SYSCALL (fcntl, 3, fd, cmd, arg);
+-# endif
+-
++	int result = __NC(fcntl)(fd, cmd, arg);
+ 	LIBC_CANCEL_RESET (oldtype);
+-
+ 	return result;
+-#else
+-# if __WORDSIZE == 32
+-	if (cmd == F_GETLK64 || cmd == F_SETLK64 || cmd == F_SETLKW64) {
+-#  if defined __UCLIBC_HAS_LFS__ && defined __NR_fcntl64
+-		return INLINE_SYSCALL (fcntl64, 3, fd, cmd, arg);
+-#  else
+-		__set_errno(ENOSYS);
+-		return -1;
+-#  endif
+-	}
+-# endif
+-	return INLINE_SYSCALL (fcntl, 3, fd, cmd, arg);
+ #endif
+ }
+-libc_hidden_def(__libc_fcntl)
+-
+-libc_hidden_proto(fcntl)
+-weak_alias(__libc_fcntl,fcntl)
+-libc_hidden_weak(fcntl)
++lt_strong_alias(fcntl)
++lt_libc_hidden(fcntl)
++#if defined __UCLIBC_HAS_LFS__ && !defined __NR_fcntl64 && __WORDSIZE == 32
++strong_alias_untyped(fcntl,fcntl64)
++lt_strong_alias(fcntl64)
++lt_libc_hidden(fcntl64)
++#endif
+diff --git a/libc/sysdeps/linux/common/__syscall_fcntl64.c b/libc/sysdeps/linux/common/__syscall_fcntl64.c
+--- a/libc/sysdeps/linux/common/__syscall_fcntl64.c
++++ b/libc/sysdeps/linux/common/__syscall_fcntl64.c
+@@ -8,13 +8,16 @@
+  */
+ 
+ #include <sys/syscall.h>
+-#include <stdarg.h>
+-#include <fcntl.h>
++#include <bits/wordsize.h>
+ 
+-#if defined __UCLIBC_HAS_LFS__ && defined __NR_fcntl64
++#if defined __UCLIBC_HAS_LFS__ && defined __NR_fcntl64 && __WORDSIZE == 32
++# include <stdarg.h>
++# include <fcntl.h>
++# include <cancel.h>
++
++# define __NR___fcntl64_nocancel __NR_fcntl64
++_syscall3(int, __NC(fcntl64), int, fd, int, cmd, long, arg)
+ 
+-#define __NR___syscall_fcntl64 __NR_fcntl64
+-static __inline__ _syscall3(int, __syscall_fcntl64, int, fd, int, cmd, long, arg)
+ int fcntl64(int fd, int cmd, ...)
+ {
+ 	long arg;
+@@ -24,7 +28,15 @@ int fcntl64(int fd, int cmd, ...)
+ 	arg = va_arg(list, long);
+ 	va_end(list);
+ 
+-	return (__syscall_fcntl64(fd, cmd, arg));
++	if (SINGLE_THREAD_P || (cmd != F_SETLKW64))
++		return __NC(fcntl64)(fd, cmd, arg);
++# ifdef __NEW_THREADS
++	int oldtype = LIBC_CANCEL_ASYNC();
++	int result = __NC(fcntl64)(fd, cmd, arg);
++	LIBC_CANCEL_RESET(oldtype);
++	return result;
++# endif
+ }
+-libc_hidden_def(fcntl64)
++lt_strong_alias(fcntl64)
++lt_libc_hidden(fcntl64)
+ #endif
+diff --git a/libc/sysdeps/linux/common/close.c b/libc/sysdeps/linux/common/close.c
+--- a/libc/sysdeps/linux/common/close.c
++++ b/libc/sysdeps/linux/common/close.c
+@@ -9,12 +9,13 @@
+ 
+ #include <sys/syscall.h>
+ #include <unistd.h>
++#include <cancel.h>
+ 
+-_syscall1(int, close, int, fd)
++#define __NR___close_nocancel __NR_close
++_syscall1(int, __NC(close), int, fd)
+ 
+-#ifndef __LINUXTHREADS_OLD__
+-libc_hidden_def(close)
+-#else
+-libc_hidden_weak(close)
+-strong_alias(close,__libc_close)
+-#endif
++#define __NR___close_nocancel_no_status __NR_close
++_syscall_noerr1(void, __close_nocancel_no_status, int, fd)
++
++CANCELLABLE_SYSCALL(int, close, (int fd), (fd))
++lt_libc_hidden(close)
+diff --git a/libc/sysdeps/linux/common/fdatasync.c b/libc/sysdeps/linux/common/fdatasync.c
+--- a/libc/sysdeps/linux/common/fdatasync.c
++++ b/libc/sysdeps/linux/common/fdatasync.c
+@@ -8,36 +8,17 @@
+  */
+ 
+ #include <sys/syscall.h>
+-#include <unistd.h>
+ 
+ #if !defined __NR_fdatasync && defined __NR_osf_fdatasync
+ # define __NR_fdatasync __NR_osf_fdatasync
+ #endif
+ 
+ #ifdef __NR_fdatasync
++# include <unistd.h>
++# include <cancel.h>
+ 
+-# ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-# include <sysdep-cancel.h>
+-# else
+-# define SINGLE_THREAD_P 1
+-# endif
+-
+-#define __NR___syscall_fdatasync __NR_fdatasync
+-
+-static __always_inline
+-_syscall1(int, __syscall_fdatasync, int, fd)
+-
+-int fdatasync(int fd)
+-{
+-	if (SINGLE_THREAD_P)
+-		return __syscall_fdatasync(fd);
+-
+-# ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-	int oldtype = LIBC_CANCEL_ASYNC ();
+-	int result = __syscall_fdatasync(fd);
+-	LIBC_CANCEL_RESET (oldtype);
+-	return result;
+-# endif
+-}
++# define __NR___fdatasync_nocancel __NR_fdatasync
++static _syscall1(int, __NC(fdatasync), int, fd)
+ 
++CANCELLABLE_SYSCALL(int, fdatasync, (int fd), (fd))
+ #endif
+diff --git a/libc/sysdeps/linux/common/fsync.c b/libc/sysdeps/linux/common/fsync.c
+--- a/libc/sysdeps/linux/common/fsync.c
++++ b/libc/sysdeps/linux/common/fsync.c
+@@ -9,29 +9,9 @@
+ 
+ #include <sys/syscall.h>
+ #include <unistd.h>
++#include <cancel.h>
+ 
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-#include "sysdep-cancel.h"
+-#else
+-#define SINGLE_THREAD_P 1
+-#endif
++#define __NR___fsync_nocancel __NR_fsync
++static _syscall1(int, __NC(fsync), int, fd)
+ 
+-#define __NR___syscall_fsync __NR_fsync
+-static inline _syscall1(int, __syscall_fsync, int, fd)
+-
+-extern __typeof(fsync) __libc_fsync;
+-
+-int __libc_fsync(int fd)
+-{
+-	if (SINGLE_THREAD_P)
+-		return __syscall_fsync(fd);
+-
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-	int oldtype = LIBC_CANCEL_ASYNC ();
+-	int result = __syscall_fsync(fd);
+-	LIBC_CANCEL_RESET (oldtype);
+-	return result;
+-#endif
+-}
+-
+-weak_alias(__libc_fsync, fsync)
++CANCELLABLE_SYSCALL(int, fsync, (int fd), (fd))
+diff --git a/libc/sysdeps/linux/common/msync.c b/libc/sysdeps/linux/common/msync.c
+--- a/libc/sysdeps/linux/common/msync.c
++++ b/libc/sysdeps/linux/common/msync.c
+@@ -8,38 +8,14 @@
+  */
+ 
+ #include <sys/syscall.h>
+-#include <unistd.h>
+-#include <sys/mman.h>
+ 
+-#ifdef __NR_msync
++#if defined __NR_msync && defined __ARCH_USE_MMU__
++# include <sys/mman.h>
++# include <cancel.h>
+ 
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-#include <sysdep-cancel.h>
+-#else
+-#define SINGLE_THREAD_P 1
+-#endif
+-
+-#define __NR___syscall_msync __NR_msync
+-static __always_inline _syscall3(int, __syscall_msync, void *, addr, size_t, length,
+-						int, flags)
+-
+-extern __typeof(msync) __libc_msync;
+-int __libc_msync(void * addr, size_t length, int flags)
+-{
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-	int oldtype, result;
+-#endif
+-
+-	if (SINGLE_THREAD_P)
+-		return __syscall_msync(addr, length, flags);
+-
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-	oldtype = LIBC_CANCEL_ASYNC ();
+-	result = __syscall_msync(addr, length, flags);
+-	LIBC_CANCEL_RESET (oldtype);
+-	return result;
+-#endif
+-}
+-weak_alias(__libc_msync,msync)
++# define __NR___msync_nocancel __NR_msync
++static _syscall3(int, __NC(msync), void *, addr, size_t, length, int, flags)
+ 
++CANCELLABLE_SYSCALL(int, msync, (void *addr, size_t length, int flags),
++		    (addr, length, flags))
+ #endif
+diff --git a/libc/sysdeps/linux/common/nanosleep.c b/libc/sysdeps/linux/common/nanosleep.c
+--- a/libc/sysdeps/linux/common/nanosleep.c
++++ b/libc/sysdeps/linux/common/nanosleep.c
+@@ -9,32 +9,13 @@
+ 
+ #include <sys/syscall.h>
+ #include <time.h>
++#include <cancel.h>
+ 
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-#include <sysdep-cancel.h>
+-#include <pthreadP.h>
+-#else
+-#define SINGLE_THREAD_P 1
+-#endif
+-
+-#define __NR___syscall_nanosleep __NR_nanosleep
+-static inline _syscall2(int, __syscall_nanosleep, const struct timespec *, req,
+-						struct timespec *, rem);
++#define __NR___nanosleep_nocancel __NR_nanosleep
++static _syscall2(int, __NC(nanosleep), const struct timespec *, req,
++		 struct timespec *, rem);
+ 
+-extern __typeof(nanosleep) __libc_nanosleep;
+-
+-int __libc_nanosleep(const struct timespec *req, struct timespec *rem)
+-{
+-	if (SINGLE_THREAD_P)
+-		return __syscall_nanosleep(req, rem);
+-
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-	int oldtype = LIBC_CANCEL_ASYNC ();
+-	int result = __syscall_nanosleep(req, rem);
+-	LIBC_CANCEL_RESET (oldtype);
+-	return result;
+-#endif
+-}
+-
+-weak_alias(__libc_nanosleep,nanosleep)
+-libc_hidden_weak(nanosleep)
++CANCELLABLE_SYSCALL(int, nanosleep,
++		    (const struct timespec *req, struct timespec *rem),
++		    (req, rem))
++lt_libc_hidden(nanosleep)
+diff --git a/libc/sysdeps/linux/common/poll.c b/libc/sysdeps/linux/common/poll.c
+--- a/libc/sysdeps/linux/common/poll.c
++++ b/libc/sysdeps/linux/common/poll.c
+@@ -20,33 +20,14 @@
+ #include <sys/syscall.h>
+ #include <sys/poll.h>
+ #include <bits/kernel-features.h>
+-
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-#include <sysdep-cancel.h>
+-#else
+-#define SINGLE_THREAD_P 1
+-#endif
+-
+-libc_hidden_proto(poll)
++#include <cancel.h>
+ 
+ #if defined __ASSUME_POLL_SYSCALL && defined __NR_poll
+ 
+-#define __NR___syscall_poll __NR_poll
+-static inline _syscall3(int, __syscall_poll, struct pollfd *, fds,
+-			unsigned long int, nfds, int, timeout);
++#define __NR___poll_nocancel __NR_poll
++static _syscall3(int, __NC(poll), struct pollfd *, fds,
++		 unsigned long int, nfds, int, timeout)
+ 
+-int poll(struct pollfd *fds, nfds_t nfds, int timeout)
+-{
+-    if (SINGLE_THREAD_P)
+-	return __syscall_poll(fds, nfds, timeout);
+-
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-    int oldtype = LIBC_CANCEL_ASYNC ();
+-    int result = __syscall_poll(fds, nfds, timeout);
+-    LIBC_CANCEL_RESET (oldtype);
+-    return result;
+-#endif
+-}
+ #else /* !__NR_poll */
+ 
+ #include <alloca.h>
+@@ -56,9 +37,7 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout)
+ #include <sys/time.h>
+ #include <sys/param.h>
+ #include <unistd.h>
+-
+-libc_hidden_proto(getdtablesize)
+-libc_hidden_proto(select)
++#include <sys/select.h>
+ 
+ /* uClinux 2.0 doesn't have poll, emulate it using select */
+ 
+@@ -68,7 +47,7 @@ libc_hidden_proto(select)
+    Returns the number of file descriptors with events, zero if timed out,
+    or -1 for errors.  */
+ 
+-int poll(struct pollfd *fds, nfds_t nfds, int timeout)
++int __NC(poll)(struct pollfd *fds, nfds_t nfds, int timeout)
+ {
+     static int max_fd_size;
+     struct timeval tv;
+@@ -139,7 +118,7 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout)
+ 
+     while (1)
+     {
+-	ready = select (maxfd + 1, rset, wset, xset,
++	ready = __NC(select) (maxfd + 1, rset, wset, xset,
+ 		timeout == -1 ? NULL : &tv);
+ 
+ 	/* It might be that one or more of the file descriptors is invalid.
+@@ -182,7 +161,7 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout)
+ 		    if (f->events & POLLPRI)
+ 			FD_SET (f->fd, sngl_xset);
+ 
+-		    n = select (f->fd + 1, sngl_rset, sngl_wset, sngl_xset,
++		    n = __NC(select) (f->fd + 1, sngl_rset, sngl_wset, sngl_xset,
+ 			    &sngl_tv);
+ 		    if (n != -1)
+ 		    {
+@@ -227,4 +206,6 @@ int poll(struct pollfd *fds, nfds_t nfds, int timeout)
+ }
+ 
+ #endif
+-libc_hidden_def(poll)
++CANCELLABLE_SYSCALL(int, poll, (struct pollfd *fds, nfds_t nfds, int timeout),
++		    (fds, nfds, timeout))
++lt_libc_hidden(poll)
+diff --git a/libc/sysdeps/linux/common/ppoll.c b/libc/sysdeps/linux/common/ppoll.c
+--- a/libc/sysdeps/linux/common/ppoll.c
++++ b/libc/sysdeps/linux/common/ppoll.c
+@@ -17,22 +17,19 @@
+    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
+    02111-1307 USA.  */
+ 
+-#include <signal.h>
+ #include <sys/syscall.h>
+-#include <sys/poll.h>
++
++#if defined __NR_ppoll && defined __UCLIBC_LINUX_SPECIFIC__ && defined __USE_GNU
++
+ #define __need_NULL
+ #include <stddef.h>
++#include <signal.h>
++#include <sys/poll.h>
++#include <cancel.h>
+ 
+-#if defined __NR_ppoll && defined __UCLIBC_LINUX_SPECIFIC__
+-# ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-#  include <sysdep-cancel.h>
+-# else
+-#  define SINGLE_THREAD_P 1
+-# endif
+-
+-int
+-ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout,
+-       const sigset_t *sigmask)
++static int
++__NC(ppoll)(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout,
++	    const sigset_t *sigmask)
+ {
+ 	/* The Linux kernel can in some situations update the timeout value.
+ 	   We do not want that so use a local variable.  */
+@@ -41,15 +38,11 @@ ppoll(struct pollfd *fds, nfds_t nfds, const struct timespec *timeout,
+ 		tval = *timeout;
+ 		timeout = &tval;
+ 	}
+-  if (SINGLE_THREAD_P)
+-		return INLINE_SYSCALL(ppoll, 5, fds, nfds, timeout, sigmask, _NSIG / 8);
+-
+-# ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-	int oldtype = LIBC_CANCEL_ASYNC ();
+-	int result = INLINE_SYSCALL(ppoll, 5, fds, nfds, timeout, sigmask, _NSIG / 8);
+-	LIBC_CANCEL_RESET (oldtype);
+-	return result;
+-# endif
++	return INLINE_SYSCALL(ppoll, 5, fds, nfds, timeout, sigmask, __SYSCALL_SIGSET_T_SIZE);
+ }
+-libc_hidden_def(ppoll)
++
++CANCELLABLE_SYSCALL(int, ppoll, (struct pollfd *fds, nfds_t nfds, const struct timespec *timeout,
++				 const sigset_t *sigmask),
++		    (fds, nfds, timeout, sigmask))
++
+ #endif
+diff --git a/libc/sysdeps/linux/common/pselect.c b/libc/sysdeps/linux/common/pselect.c
+--- a/libc/sysdeps/linux/common/pselect.c
++++ b/libc/sysdeps/linux/common/pselect.c
+@@ -17,78 +17,50 @@
+    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
+    02111-1307 USA.  */
+ 
+-#include <errno.h>
+-#include <signal.h>
+-#include <stddef.h>	/* For NULL.  */
+-#include <sys/time.h>
+-#include <sys/select.h>
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-#include <sysdep-cancel.h>
+-#endif
++#include <features.h>
+ 
+-libc_hidden_proto(sigprocmask)
+-libc_hidden_proto(select)
++#ifdef __USE_XOPEN2K
+ 
++#include <sys/syscall.h>
++#include <sys/select.h>
++#include <sys/time.h>
++#include <signal.h>
++#include <cancel.h>
+ 
+-/* Check the first NFDS descriptors each in READFDS (if not NULL) for read
+-   readiness, in WRITEFDS (if not NULL) for write readiness, and in EXCEPTFDS
+-   (if not NULL) for exceptional conditions.  If TIMEOUT is not NULL, time out
+-   after waiting the interval specified therein.  Additionally set the sigmask
+-   SIGMASK for this call.  Returns the number of ready descriptors, or -1 for
+-   errors.  */
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-static int
+-__pselect (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+-#else
+-int
+-pselect (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+-#endif
+-	   const struct timespec *timeout, const sigset_t *sigmask)
++static int __NC(pselect)(int nfds, fd_set *readfds, fd_set *writefds,
++			 fd_set *exceptfds, const struct timespec *timeout,
++			 const sigset_t *sigmask)
+ {
+-  struct timeval tval;
+-  int retval;
+-  sigset_t savemask;
+-
+-  /* Change nanosecond number to microseconds.  This might mean losing
+-     precision and therefore the `pselect` should be available.  But
+-     for now it is hardly found.  */
+-  if (timeout != NULL)
+-    TIMESPEC_TO_TIMEVAL (&tval, timeout);
+-
+-  /* The setting and restoring of the signal mask and the select call
+-     should be an atomic operation.  This can't be done without kernel
+-     help.  */
+-  if (sigmask != NULL)
+-    sigprocmask (SIG_SETMASK, sigmask, &savemask);
+-
+-  /* Note the pselect() is a cancellation point.  But since we call
+-     select() which itself is a cancellation point we do not have
+-     to do anything here.  */
+-  retval = select (nfds, readfds, writefds, exceptfds,
+-		     timeout != NULL ? &tval : NULL);
+-
+-  if (sigmask != NULL)
+-    sigprocmask (SIG_SETMASK, &savemask, NULL);
+-
+-  return retval;
++	struct timeval tval;
++	int retval;
++	sigset_t savemask;
++
++	/* Change nanosecond number to microseconds.  This might mean losing
++	   precision and therefore the `pselect` should be available.  But
++	   for now it is hardly found.  */
++	if (timeout != NULL)
++		TIMESPEC_TO_TIMEVAL (&tval, timeout);
++
++	/* The setting and restoring of the signal mask and the select call
++	   should be an atomic operation.  This can't be done without kernel
++	   help.  */
++	if (sigmask != NULL)
++		sigprocmask (SIG_SETMASK, sigmask, &savemask);
++
++	/* The comment below does not apply on uClibc, since we use __select_nocancel */
++	/* Note the pselect() is a cancellation point.  But since we call
++	   select() which itself is a cancellation point we do not have
++	   to do anything here.  */
++	retval = __NC(select)(nfds, readfds, writefds, exceptfds,
++			timeout != NULL ? &tval : NULL);
++
++	if (sigmask != NULL)
++		sigprocmask (SIG_SETMASK, &savemask, NULL);
++
++	return retval;
+ }
++CANCELLABLE_SYSCALL(int, pselect, (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
++				   const struct timespec *timeout, const sigset_t *sigmask),
++		    (nfds, readfds, writefds, exceptfds, timeout, sigmask))
+ 
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-int
+-pselect (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+-	   const struct timespec *timeout, const sigset_t *sigmask)
+-{
+-	if (SINGLE_THREAD_P)
+-		return __pselect (nfds, readfds, writefds, exceptfds,
+-				  timeout, sigmask);
+-
+-	int oldtype = LIBC_CANCEL_ASYNC ();
+-
+-	int result = __pselect (nfds, readfds, writefds, exceptfds,
+-				 timeout, sigmask);
+-
+-	LIBC_CANCEL_RESET (oldtype);
+-
+-	return result;
+-}
+ #endif
+diff --git a/libc/sysdeps/linux/common/read.c b/libc/sysdeps/linux/common/read.c
+--- a/libc/sysdeps/linux/common/read.c
++++ b/libc/sysdeps/linux/common/read.c
+@@ -9,11 +9,11 @@
+ 
+ #include <sys/syscall.h>
+ #include <unistd.h>
++#include <cancel.h>
+ 
+-_syscall3(ssize_t, read, int, fd, __ptr_t, buf, size_t, count)
+-#ifndef __LINUXTHREADS_OLD__
+-libc_hidden_def(read)
+-#else
+-libc_hidden_weak(read)
+-strong_alias(read,__libc_read)
+-#endif
++#define __NR___read_nocancel __NR_read
++_syscall3(ssize_t, __NC(read), int, fd, void *, buf, size_t, count)
++
++CANCELLABLE_SYSCALL(ssize_t, read, (int fd, void *buf, size_t count),
++		    (fd, buf, count))
++lt_libc_hidden(read)
+diff --git a/libc/sysdeps/linux/common/select.c b/libc/sysdeps/linux/common/select.c
+--- a/libc/sysdeps/linux/common/select.c
++++ b/libc/sysdeps/linux/common/select.c
+@@ -9,27 +9,24 @@
+ 
+ #include <sys/syscall.h>
+ #include <sys/select.h>
+-#include <stdint.h>
++#include <cancel.h>
+ 
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-#include <sysdep-cancel.h>
+-#else
+-#define SINGLE_THREAD_P 1
++#ifdef __NR__newselect
++# undef __NR_select
++# define __NR_select __NR__newselect
+ #endif
+ 
+-#define USEC_PER_SEC 1000000L
+-
+-extern __typeof(select) __libc_select;
+-
+-#if !defined(__NR__newselect) && !defined(__NR_select) && defined __USE_XOPEN2K
+-# define __NR___libc_pselect6 __NR_pselect6
+-static _syscall6(int, __libc_pselect6, int, n, fd_set *, readfds, fd_set *, writefds,
+-        fd_set *, exceptfds, const struct timespec *, timeout,
+-        const sigset_t *, sigmask)
++#if !defined __NR_select && defined __NR_pselect6
++# include <stdint.h>
++# define USEC_PER_SEC 1000000L
++#endif
+ 
+-int __libc_select(int n, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+-                  struct timeval *timeout)
++int __NC(select)(int n, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
++		 struct timeval *timeout)
+ {
++#ifdef __NR_select
++	return INLINE_SYSCALL(select, 5, n, readfds, writefds, exceptfds, timeout);
++#elif defined __NR_pselect6
+ 	struct timespec _ts, *ts = 0;
+ 	if (timeout) {
+ 		uint32_t usec;
+@@ -51,44 +48,14 @@ int __libc_select(int n, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+ 
+ 		ts = &_ts;
+ 	}
+-
+-	if (SINGLE_THREAD_P)
+-		return __libc_pselect6(n, readfds, writefds, exceptfds, ts, 0);
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-	int oldtype = LIBC_CANCEL_ASYNC ();
+-	int result = __libc_pselect6(n, readfds, writefds, exceptfds, ts, 0);
+-	LIBC_CANCEL_RESET (oldtype);
+-	return result;
+-#endif
+-
+-}
+-
+-#else
+-
+-#ifdef __NR__newselect
+-# define __NR___syscall_select __NR__newselect
+-#else
+-# define __NR___syscall_select __NR_select
+-#endif
+-
+-static _syscall5(int, __syscall_select, int, n, fd_set *, readfds,
+-		fd_set *, writefds, fd_set *, exceptfds, struct timeval *, timeout);
+-
+-int __libc_select(int n, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+-                  struct timeval *timeout)
+-{
+-	if (SINGLE_THREAD_P)
+-		return __syscall_select(n, readfds, writefds, exceptfds, timeout);
+-
+-#ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-	int oldtype = LIBC_CANCEL_ASYNC ();
+-	int result = __syscall_select(n, readfds, writefds, exceptfds, timeout);
+-	LIBC_CANCEL_RESET (oldtype);
+-	return result;
++	return INLINE_SYSCALL(pselect6, 6, n, readfds, writefds, exceptfds, ts, 0);
+ #endif
+ }
+-
++/* we should guard it, but we need it in other files, so let it fail
++ * if we miss any of the syscalls */
++#if 1 /*defined __NR_select || defined __NR_pselect6*/
++CANCELLABLE_SYSCALL(int, select, (int n, fd_set *readfds, fd_set *writefds,
++				  fd_set *exceptfds, struct timeval *timeout),
++		    (n, readfds, writefds, exceptfds, timeout))
++lt_libc_hidden(select)
+ #endif
+-
+-weak_alias(__libc_select,select)
+-libc_hidden_weak(select)
+diff --git a/libc/sysdeps/linux/common/sigsuspend.c b/libc/sysdeps/linux/common/sigsuspend.c
+--- a/libc/sysdeps/linux/common/sigsuspend.c
++++ b/libc/sysdeps/linux/common/sigsuspend.c
+@@ -9,51 +9,18 @@
+ 
+ #include <sys/syscall.h>
+ 
+-#if defined __USE_POSIX
++#ifdef __USE_POSIX
+ #include <signal.h>
+-#undef sigsuspend
++#include <cancel.h>
+ 
+-libc_hidden_proto(sigsuspend)
+-
+-#ifdef __NR_rt_sigsuspend
+-# define __NR___rt_sigsuspend __NR_rt_sigsuspend
+-
+-# ifdef __UCLIBC_HAS_THREADS_NATIVE__
+-#  include <errno.h>
+-#  include <sysdep-cancel.h>
+-
+-/* Change the set of blocked signals to SET,
+-   wait until a signal arrives, and restore the set of blocked signals.  */
+-int sigsuspend (const sigset_t *set)
++int __NC(sigsuspend)(const sigset_t *set)
+ {
+-	if (SINGLE_THREAD_P)
+-		return INLINE_SYSCALL (rt_sigsuspend, 2, set, _NSIG / 8);
+-
+-	int oldtype = LIBC_CANCEL_ASYNC ();
+-
+-	int result = INLINE_SYSCALL (rt_sigsuspend, 2, set, _NSIG / 8);
+-
+-	LIBC_CANCEL_RESET (oldtype);
+-
+-	return result;
+-}
+-# else
+-static inline _syscall2(int, __rt_sigsuspend, const sigset_t *, mask, size_t, size)
+-
+-int sigsuspend(const sigset_t * mask)
+-{
+-	return __rt_sigsuspend(mask, _NSIG / 8);
+-}
+-# endif
++#ifdef __NR_rt_sigsuspend
++	return INLINE_SYSCALL(rt_sigsuspend, 2, set, __SYSCALL_SIGSET_T_SIZE);
+ #else
+-# define __NR___syscall_sigsuspend __NR_sigsuspend
+-static __inline__ _syscall3(int, __syscall_sigsuspend, int, a, unsigned long int, b,
+-		  unsigned long int, c)
+-
+-int sigsuspend(const sigset_t * set)
+-{
+-	return __syscall_sigsuspend(0, 0, set->__val[0]);
+-}
++	return INLINE_SYSCALL(sigsuspend, 3, 0, 0, set->__val[0]);
+ #endif
+-libc_hidden_def(sigsuspend)
++}
++CANCELLABLE_SYSCALL(int, sigsuspend, (const sigset_t *set), (set))
++lt_libc_hidden(sigsuspend)
+ #endif
+diff --git a/libc/sysdeps/linux/common/write.c b/libc/sysdeps/linux/common/write.c
+--- a/libc/sysdeps/linux/common/write.c
++++ b/libc/sysdeps/linux/common/write.c
+@@ -9,17 +9,11 @@
+ 
+ #include <sys/syscall.h>
+ #include <unistd.h>
++#include <cancel.h>
+ 
+-_syscall3(ssize_t, write, int, fd, const __ptr_t, buf, size_t, count)
+-#ifndef __LINUXTHREADS_OLD__
+-libc_hidden_def(write)
+-#else
+-libc_hidden_weak(write)
+-strong_alias(write,__libc_write)
+-#endif
++#define __NR___write_nocancel __NR_write
++_syscall3(ssize_t, __NC(write), int, fd, const void *, buf, size_t, count)
+ 
+-#if 0
+-/* Stupid libgcc.a from gcc 2.95.x uses __write in pure.o
+- * which is a blatant GNU libc-ism... */
+-strong_alias(write,__write)
+-#endif
++CANCELLABLE_SYSCALL(ssize_t, write, (int fd, const void *buf, size_t count),
++		    (fd, buf, count))
++lt_libc_hidden(write)
+-- 
