@@ -1,0 +1,119 @@
+pselect: Use linux pselect6 syscall when available
+
+Linux has a pselect6 syscall since 2.6.16+. Using it
+rather than emulating it with sigprocmask+select+sigprocmask.
+The emulation has race conditions when unblocked signals arrive
+before or after the select.
+
+Initial idea taken from patch by Nicolas S. Dade <nic.dade at gmail.com> ,
+test-case also provided by him. But I decide to rewrite it from the scratch,
+basing on glibc code, to reduce bloat & sixth argument specific processing.
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+---
+
+diff --git a/libc/sysdeps/linux/common/pselect.c b/libc/sysdeps/linux/common/pselect.c
+--- a/libc/sysdeps/linux/common/pselect.c
++++ b/libc/sysdeps/linux/common/pselect.c
+@@ -31,6 +31,34 @@ static int __NC(pselect)(int nfds, fd_set *readfds, fd_set *writefds,
+ 			 fd_set *exceptfds, const struct timespec *timeout,
+ 			 const sigset_t *sigmask)
+ {
++#ifdef __NR_pselect6
++	/* The Linux kernel can in some situations update the timeout value.
++	 * We do not want that so use a local variable.
++	 */
++	struct timespec _ts;
++
++	if (timeout != NULL) {
++		_ts = *timeout;
++		timeout = &_ts;
++	}
++	/* Note: the system call expects 7 values but on most architectures
++	   we can only pass in 6 directly.  If there is an architecture with
++	   support for more parameters a new version of this file needs to
++	   be created.  */
++	struct {
++		__kernel_ulong_t ss;
++		__kernel_size_t  ss_len;
++	} data;
++
++	if (sigmask != NULL) {
++		data.ss = (__kernel_ulong_t) sigmask;
++		data.ss_len = __SYSCALL_SIGSET_T_SIZE;
++
++		sigmask = (void *)&data;
++	}
++
++	return INLINE_SYSCALL(pselect6, 6, nfds, readfds, writefds, exceptfds, timeout, sigmask);
++#else
+ 	struct timeval tval;
+ 	int retval;
+ 	sigset_t savemask;
+@@ -58,6 +87,7 @@ static int __NC(pselect)(int nfds, fd_set *readfds, fd_set *writefds,
+ 		sigprocmask (SIG_SETMASK, &savemask, NULL);
+ 
+ 	return retval;
++#endif
+ }
+ CANCELLABLE_SYSCALL(int, pselect, (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+ 				   const struct timespec *timeout, const sigset_t *sigmask),
+diff --git a/test/unistd/tst-pselect.c b/test/unistd/tst-pselect.c
+new file mode 100644
+--- /dev/null
++++ b/test/unistd/tst-pselect.c
+@@ -0,0 +1,52 @@
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <errno.h>
++#include <signal.h>
++#include <sys/types.h>
++#include <sys/select.h>
++
++// our SIGALRM handler
++void handler(int signum) {
++        (void)signum;
++        write(1, "got signal\n", 11);
++}
++
++
++static int
++do_test (void)
++{
++	int rc;
++        sigset_t wait_mask, mask_sigchld;
++        struct sigaction act;
++
++        // block SIGALRM. We want to handle it only when we're ready
++        sigemptyset(&mask_sigchld);
++        sigaddset(&mask_sigchld, SIGALRM);
++        sigprocmask(SIG_BLOCK,  &mask_sigchld, &wait_mask);
++        sigdelset(&wait_mask, SIGALRM);
++
++        // register a signal handler so we can see when the signal arrives
++        memset(&act, 0, sizeof(act));
++        sigemptyset(&act.sa_mask); // just in case an empty set isn't all 0's (total paranoia)
++        act.sa_handler = handler;
++        sigaction(SIGALRM, &act, NULL);
++
++        // send ourselves a SIGARLM. It will pend until we unblock that signal in pselect()
++        printf("sending ourselves a signal\n");
++        kill(getpid(), SIGALRM);
++
++        printf("signal is pending; calling pselect()\n");
++        rc = pselect(0, NULL, NULL, NULL, NULL, &wait_mask);
++        if (rc != -1 || errno != EINTR) {
++		int e = errno;
++	        printf("pselect() returned %d, errno %d (%s)\n", rc, e, strerror(e));
++		exit(1);
++	}
++
++        return 0;
++}
++
++#define TEST_FUNCTION do_test ()
++#include <test-skeleton.c>
+-- 
