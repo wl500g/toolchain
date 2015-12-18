@@ -1,0 +1,47 @@
+From: Wojciech Nizinski <w.nizinski at grinn-global.com>
+Date: Tue, 20 Oct 2015 14:08:09 +0200
+Subject: libc/stdlib: canonicalize_file_name() memory leak
+
+[ uClibc-ng f5f83a9f ]
+
+Uclibc's canonicalize_file_name() is allocating temprary buffer of 4kB
+(PATH_MAX), and passing it to realpath() as second argument. Function is
+not checking if realpath() fails and memory is lost.
+---
+
+diff --git a/libc/stdlib/canonicalize.c b/libc/stdlib/canonicalize.c
+--- a/libc/stdlib/canonicalize.c
++++ b/libc/stdlib/canonicalize.c
+@@ -9,30 +9,11 @@
+  */
+ 
+ #include <stdlib.h>
+-#include <limits.h>
+ 
+ #ifdef __USE_GNU
+ 
+-#ifndef PATH_MAX
+-# ifdef _POSIX_VERSION
+-#  define PATH_MAX _POSIX_PATH_MAX
+-# else
+-#  ifdef MAXPATHLEN
+-#   define PATH_MAX MAXPATHLEN
+-#  else
+-#   define PATH_MAX 1024
+-#  endif
+-# endif
+-#endif
+-
+ char * canonicalize_file_name (const char *name)
+ {
+-	char *buf = (char *) malloc(PATH_MAX);
+-
+-	if(unlikely(buf == NULL))
+-		return NULL;
+-
+-	*buf='\0';
+-	return realpath (name, buf);
++	return realpath (name, NULL);
+ }
+ #endif
+-- 
