@@ -1,0 +1,131 @@
+pthread_atfork handlers not removed during dlclose
+
+Invoke pthread_atfork handler cleanup when removing the associated DSO...
+
+If a program loads a DSO (dlopen) that sets up a pthread_atfork handler(s), and
+then subsequently closes the DSO, the handler(s) are left in place.  If fork()
+is subsequently called, the handlers are invoked even though the DSO has been
+removed causing crashes or unpredictable code execution.  This is because the
+code in __cxa_finalize(atexit.c)to invoke the unregister_atfork() routine is
+ifdef'd out with the comment that it hasn't been "looked into this yet...".
+
+Refs.:
+ http://bugs.busybox.net/show_bug.cgi?id=8211
+ http://sourceware.org/bugzilla/show_bug.cgi?id=13502
+
+Add test-case.
+
+Signed-off-by: John Ata <john.ata@baesystems.com>
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+diff --git a/libc/stdlib/_atexit.c b/libc/stdlib/_atexit.c
+--- a/libc/stdlib/_atexit.c
++++ b/libc/stdlib/_atexit.c
+@@ -42,6 +42,7 @@
+ #include <stdlib.h>
+ #include <errno.h>
+ #include <atomic.h>
++#include <fork.h>
+ 
+ #include <bits/uClibc_mutex.h>
+ __UCLIBC_MUTEX_EXTERN(__atexit_lock) attribute_hidden;
+@@ -207,17 +208,15 @@
+         }
+     }
+ 
+-#if 0 /* haven't looked into this yet... */
+     /*
+      * Remove the registered fork handlers. We do not have to
+      * unregister anything if the program is going to terminate anyway.
+      */
+ #ifdef UNREGISTER_ATFORK
+-    if (d != NULL) {
+-        UNREGISTER_ATFORK(d);
++    if (dso_handle != NULL) {
++        UNREGISTER_ATFORK(dso_handle);
+     }
+ #endif
+-#endif
+ }
+ #endif
+ 
+diff --git a/test/pthread/Makefile.in b/test/pthread/Makefile.in
+--- a/test/pthread/Makefile.in
++++ b/test/pthread/Makefile.in
+@@ -6,3 +6,11 @@ TESTS_DISABLED += cancellation-points
+ EXTRA_LDFLAGS := -lpthread
+ 
+ LDFLAGS_cancellation-points := -lrt
++
++# exclude shared
++TESTS_DISABLED += libatfork
++
++tst-atfork: libatfork.so
++tst-atfork_glibc: libatfork.so.glibc
++LDFLAGS_tst-atfork := -ldl
++LDFLAGS_libatfork.so := -lpthread
+diff --git a/test/pthread/libatfork.c b/test/pthread/libatfork.c
+new file mode 100644
+--- /dev/null
++++ b/test/pthread/libatfork.c
+@@ -0,0 +1,27 @@
++#include <stdio.h>
++#include <pthread.h>
++
++static void atfork_prepare(void)
++{
++    /*  nothing to do  */
++}
++
++static void atfork_parent(void)
++{
++    /*  nothing to do  */
++}
++
++static void atfork_child(void)
++{
++    /*  nothing to do  */
++}
++
++static __attribute__((constructor)) void init(void)
++{
++    pthread_atfork(atfork_prepare, atfork_parent, atfork_child);
++}
++
++static __attribute__((destructor)) void done(void)
++{
++    /*  nothing to do  */
++}
+diff --git a/test/pthread/tst-atfork.c b/test/pthread/tst-atfork.c
+new file mode 100644
+--- /dev/null
++++ b/test/pthread/tst-atfork.c
+@@ -0,0 +1,27 @@
++#include <stdio.h>
++#include <unistd.h>
++#include <dlfcn.h>
++
++#define __NO_TESTCODE__
++#include "../testsuite.h"
++
++int main(int argc, char *argv[])
++{
++    void *h;
++    pid_t pid;
++
++    h = dlopen("./libatfork"_SO_EXT, RTLD_NOW);
++    if (!h)
++    {
++        printf("Failed to open libatfork.so\n");
++        return 1;
++    }
++    dlclose(h);
++
++    if ((pid = fork()) < 0) {
++	printf("Fork failed\n");
++        return 1;
++    }
++
++    return 0;
++}
+-- 
