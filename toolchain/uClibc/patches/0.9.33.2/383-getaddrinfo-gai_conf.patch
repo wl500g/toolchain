@@ -1,31 +1,55 @@
-Implement simplest variant of /etc/gai.conf to control IPv6/IPv4 names order
-resolution. Unfortunately, it incompatible with glibc due it(glibc) hasn't
-simple switch, just longest prefix matching list - consumes too much code.
+inet/getaddrinfo: simplest /etc/gai.conf to control IPv6/IPv4 addresses sort order
 
-Default names resolution behavior remains old - IPv6 first, IPv4 second.
-To change it to IPv4 first, IPv6 second, create /etc/gai.conf containing
-single line:
+Implement simplest variant of /etc/gai.conf to control getaddrinfo
+IPv6/IPv4 addresses sorting. Keep the default sort order - IPv6 first,
+IPv4 second. To invert it, create /etc/gai.conf containing single line:
 
- precedence ipv4
+ precedence ::ffff:0:0/96  100
+
+
+Example before:
+
+$ nslookup security.debian.org 8.8.8.8
+Server:    8.8.8.8
+Address 1: 8.8.8.8 google-public-dns-a.google.com
+
+Name:      security.debian.org
+Address 1: 2001:a78:5:0:216:35ff:fe7f:be4f villa.debian.org
+Address 2: 2001:a78:5:1:216:35ff:fe7f:6ceb lobos.debian.org
+Address 3: 195.20.242.89 wieck.debian.org
+Address 4: 212.211.132.250 lobos.debian.org
+Address 5: 212.211.132.32 villa.debian.org
+
+
+After patch & precedence set in /etc/gai.conf:
+
+$ nslookup security.debian.org 8.8.8.8
+Server:    8.8.8.8
+Address 1: 8.8.8.8 google-public-dns-a.google.com
+
+Name:      security.debian.org
+Address 1: 195.20.242.89 wieck.debian.org
+Address 2: 212.211.132.250 lobos.debian.org
+Address 3: 212.211.132.32 villa.debian.org
+Address 4: 2001:a78:5:0:216:35ff:fe7f:be4f villa.debian.org
+Address 5: 2001:a78:5:1:216:35ff:fe7f:6ceb lobos.debian.org
+
 
  bloat-o-meter report:
-add/remove: 1/0 grow/shrink: 3/1 up/down: 367/-36 (329)
-function                                     old     new   delta
-getaddrinfo                                  856    1128    +272
-gaih_inet                                   3256    3348     +92
-__gai_precedence                               -       1      +1
-__open_nameservers                          1400    1364     -36
+function                                             old     new   delta
+getaddrinfo                                          726    1138    +412
+gaih_inet                                           2660    2692     +32
+.rodata                                            16618   16643     +25
+__gai_precedence                                       -       1      +1
+------------------------------------------------------------------------------
+(add/remove: 1/0 grow/shrink: 4/0 up/down: 882/0)             Total: 470 bytes
 
 Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
----
- libc/inet/getaddrinfo.c |   75 ++++++++++++++++++++++++++++++++++++++++++++++--
- libc/inet/resolv.c      |    6 ++-
- 2 files changed, 76 insertions(+), 5 deletions(-)
 
 diff --git a/libc/inet/getaddrinfo.c b/libc/inet/getaddrinfo.c
 --- a/libc/inet/getaddrinfo.c
 +++ b/libc/inet/getaddrinfo.c
-@@ -64,6 +64,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBI
+@@ -62,6 +62,7 @@
  #include <stdlib.h>
  #include <string.h>
  #include <unistd.h>
@@ -33,7 +57,15 @@ diff --git a/libc/inet/getaddrinfo.c b/libc/inet/getaddrinfo.c
  #include <arpa/inet.h>
  #include <sys/socket.h>
  #include <netinet/in.h>
-@@ -350,6 +351,11 @@ gaih_inet_serv(const char *servicename, 
+@@ -70,6 +71,7 @@
+ #include <sys/utsname.h>
+ #include <net/if.h>
+ #include <ifaddrs.h>
++#include "internal/parse_config.h"
+ 
+ #define GAIH_OKIFUNSPEC 0x0100
+ #define GAIH_EAI        ~(GAIH_OKIFUNSPEC)
+@@ -348,6 +350,11 @@ gaih_inet_serv(const char *servicename, const struct gaih_typeproto *tp,
  	return 0;
  }
  
@@ -45,7 +77,7 @@ diff --git a/libc/inet/getaddrinfo.c b/libc/inet/getaddrinfo.c
  /* NB: also uses h,pat,rc,no_data variables */
  #define gethosts(_family, _type)						\
  {										\
-@@ -554,21 +560,32 @@ gaih_inet(const char *name, const struct
+@@ -552,21 +559,32 @@ gaih_inet(const char *name, const struct gaih_service *service,
  		if (at->family == AF_UNSPEC && !(req->ai_flags & AI_NUMERICHOST)) {
  			struct hostent *h;
  			struct gaih_addrtuple **pat = &at;
@@ -81,7 +113,7 @@ diff --git a/libc/inet/getaddrinfo.c b/libc/inet/getaddrinfo.c
  			if (req->ai_family == AF_INET
  			 || (!v4mapped && req->ai_family == AF_UNSPEC)
  			 || (v4mapped && (no_inet6_data != 0 || (req->ai_flags & AI_ALL)))
-@@ -576,7 +593,14 @@ gaih_inet(const char *name, const struct
+@@ -574,7 +592,14 @@ gaih_inet(const char *name, const struct gaih_service *service,
  				if (!(req->ai_flags & AI_ADDRCONFIG) || (seen & SEEN_IPV4))
  					gethosts(AF_INET, struct in_addr);
  			}
@@ -96,58 +128,79 @@ diff --git a/libc/inet/getaddrinfo.c b/libc/inet/getaddrinfo.c
  			if (no_data != 0 && no_inet6_data != 0) {
  				/* If both requests timed out report this. */
  				if (no_data == EAI_AGAIN && no_inet6_data == EAI_AGAIN)
-@@ -777,6 +801,50 @@ static const struct gaih gaih[] = {
+@@ -775,6 +800,71 @@ static const struct gaih gaih[] = {
  	{ PF_UNSPEC, NULL }
  };
  
 +#if defined __UCLIBC_HAS_IPV6__
-+/* Helpers. Both stop on EOL, if it's '\n', it is converted to NUL first */
-+extern char *skip_nospace(char *p);
-+extern char *skip_and_NUL_space(char *p);
 +
++/*
++ * A call to getaddrinfo might return multiple answers. To provide
++ * possibility to change the sorting we must use /etc/gai.conf file,
++ * like glibc.
++ *
++ * gai.conf format:
++ *
++ * label <netmask> <precedence>
++ *				The value is added to the label table used in
++ *				the RFC 3484 sorting. If any label definition
++ *				is present in the configuration file is present,
++ *				the default table is not used. All the label
++ *				definitions of the default table which are to
++ *				be maintained have to be duplicated.
++ * precedence <netmask> <precedence>
++ * 				This keyword is similar to label, but instead
++ *				the value is added to the precedence table as
++ *				specified in RFC 3484. Once again, the presence
++ *				of a single precedence line in the configuration
++ *				file causes the default table to not be used.
++ *
++ * The simplified uclibc's implementation allows to change the IPv4/IPv6
++ * sorting order for a whole address space only, i.e
++ *  "precedence ::ffff:0:0/96 100" is only supported.
++ */
 +static void __gai_conf_parse(void)
 +{
-+	/* NO reread of /etc/gai.conf if it was modified for now. */
++	/* NO reread of /etc/gai.conf on change. */
++	if (__gai_precedence != 0)
++		return;
 +
-+	if (__gai_precedence == 0) {
-+		FILE *fp;
-+		char szBuffer[128];
++	__gai_precedence = 1; /* default IPv6 */
 +
-+		__gai_precedence = 1; /* default IPv6 */
++	parser_t *parser;
++	char **tok = NULL;
 +
-+		fp = fopen("/etc/gai.conf", "r");
-+		if (!fp)
-+			return;
++	parser = config_open("/etc/gai.conf");
++	if (!parser)
++		return;
 +
-+		while (fgets(szBuffer, sizeof(szBuffer), fp) != NULL) {
-+			char *keyword, *p;
++	while (config_read(parser, &tok, 3, 3, "# \t", PARSE_NORMAL)) {
++		if (strcmp(tok[0], "precedence") == 0) {
++			char *pfx;
++			struct in6_addr mask;
 +
-+			keyword = p = skip_and_NUL_space(szBuffer);
-+			/* skip keyword */
-+			p = skip_nospace(p);
-+			/* find next word */
-+			p = skip_and_NUL_space(p);
-+
-+			if (strcmp(keyword, "precedence") == 0) {
-+				if (p != NULL) {
-+					/* terminate param */
-+					*skip_nospace(p) = '\0';
-+					if (strcmp(p, "ipv4") == 0)
-+						__gai_precedence = 2;
-+				}
-+			}
++			pfx = strchr(tok[1], '/');
++			if (!pfx)
++				continue;
++			*(pfx++) = 0;
++			if (inet_pton(AF_INET6, tok[1], &mask) <= 0)
++				continue;
++			if (IN6_IS_ADDR_V4MAPPED(&mask)
++			    && mask.s6_addr32[3] == 0
++			    && atoi(pfx) == 96 && atoi(tok[2]) == 100)
++				__gai_precedence = 2;	/* IPv4 first */
 +		}
-+		fclose(fp);
 +	}
++	config_close(parser);
 +}
 +#else
 +# define __gai_conf_parse(x)
-+#endif
++#endif /* __UCLIBC_HAS_IPV6__ */
 +
  void
  freeaddrinfo(struct addrinfo *ai)
  {
-@@ -843,6 +911,7 @@ getaddrinfo(const char *name, const char
+@@ -834,6 +923,7 @@ getaddrinfo(const char *name, const char *service,
  	} else
  		pservice = NULL;
  
@@ -155,27 +208,4 @@ diff --git a/libc/inet/getaddrinfo.c b/libc/inet/getaddrinfo.c
  	g = gaih;
  	pg = NULL;
  	p = NULL;
-diff --git a/libc/inet/resolv.c b/libc/inet/resolv.c
---- a/libc/inet/resolv.c
-+++ b/libc/inet/resolv.c
-@@ -936,7 +936,8 @@ const struct sockaddr_in6 __local_namese
- #endif
- 
- /* Helpers. Both stop on EOL, if it's '\n', it is converted to NUL first */
--static char *skip_nospace(char *p)
-+extern char *skip_nospace(char *p) attribute_hidden;
-+char attribute_hidden *skip_nospace(char *p)
- {
- 	while (*p != '\0' && !isspace(*p)) {
- 		if (*p == '\n') {
-@@ -947,7 +948,8 @@ static char *skip_nospace(char *p)
- 	}
- 	return p;
- }
--static char *skip_and_NUL_space(char *p)
-+extern char *skip_and_NUL_space(char *p) attribute_hidden;
-+char attribute_hidden *skip_and_NUL_space(char *p)
- {
- 	/* NB: '\n' is not isspace! */
- 	while (1) {
 -- 
