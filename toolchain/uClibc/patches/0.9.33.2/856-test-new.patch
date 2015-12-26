@@ -39,15 +39,12 @@ diff --git b/test/dlopen/constload1.c b/test/dlopen/constload1.c
 new file mode 100644
 --- /dev/null
 +++ b/test/dlopen/constload1.c
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,29 @@
 +#include <dlfcn.h>
 +#include <errno.h>
 +#include <error.h>
 +#include <stdio.h>
 +#include <stdlib.h>
-+
-+#define __NO_TESTCODE__
-+#include "../testsuite.h"
 +
 +int
 +main (void)
@@ -56,7 +53,7 @@ new file mode 100644
 +  void *h;
 +  int ret;
 +
-+  h = dlopen ("constload2mod"_SO_EXT, RTLD_LAZY | RTLD_GLOBAL);
++  h = dlopen ("constload2mod.so"_SO_EXT1, RTLD_LAZY | RTLD_GLOBAL);
 +  if (h == NULL)
 +    error (EXIT_FAILURE, errno, "cannot load module constload2mod");
 +  foo = dlsym (h, "foo");
@@ -76,13 +73,10 @@ diff --git b/test/dlopen/constload2mod.c b/test/dlopen/constload2mod.c
 new file mode 100644
 --- /dev/null
 +++ b/test/dlopen/constload2mod.c
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,51 @@
 +#include <dlfcn.h>
 +#include <stdio.h>
 +#include <stdlib.h>
-+
-+#define __NO_TESTCODE__
-+#include "../testsuite.h"
 +
 +extern int bar (void);
 +extern int baz (void);
@@ -103,7 +97,7 @@ new file mode 100644
 +  return -21;
 +}
 +
-+#define LIBNAME1	"constload3mod"_SO_EXT
++#define LIBNAME1	"constload3mod.so"_SO_EXT1
 +
 +void
 +__attribute__ ((__constructor__))
@@ -148,15 +142,12 @@ diff --git b/test/dlopen/nodelete.c b/test/dlopen/nodelete.c
 new file mode 100644
 --- /dev/null
 +++ b/test/dlopen/nodelete.c
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,211 @@
 +#include <dlfcn.h>
 +#include <setjmp.h>
 +#include <signal.h>
 +#include <stdio.h>
 +#include <stdlib.h>
-+
-+#define __NO_TESTCODE__
-+#include "../testsuite.h"
 +
 +
 +static sigjmp_buf jmpbuf;
@@ -195,7 +186,7 @@ new file mode 100644
 +  if (sigaction (SIGSEGV, &sa, NULL) == -1)
 +    printf ("cannot install signal handler: %m\n");
 +
-+  p = dlopen ("nodelmod1"_SO_EXT, RTLD_LAZY);
++  p = dlopen ("nodelmod1.so"_SO_EXT1, RTLD_LAZY);
 +  if (p == NULL)
 +    {
 +      printf ("failed to load \"nodelmod1.so\": %s\n", dlerror ());
@@ -249,7 +240,7 @@ new file mode 100644
 +	}
 +    }
 +
-+  p = dlopen ("nodelmod2"_SO_EXT, RTLD_LAZY | RTLD_NODELETE);
++  p = dlopen ("nodelmod2.so"_SO_EXT1, RTLD_LAZY | RTLD_NODELETE);
 +  if (p == NULL)
 +    {
 +      printf ("failed to load \"nodelmod2.so\": %s\n", dlerror ());
@@ -303,7 +294,7 @@ new file mode 100644
 +	}
 +    }
 +
-+  p = dlopen ("nodelmod3"_SO_EXT, RTLD_LAZY);
++  p = dlopen ("nodelmod3.so"_SO_EXT1, RTLD_LAZY);
 +  if (p == NULL)
 +    {
 +      printf ("failed to load \"nodelmod3.so\": %s\n", dlerror ());

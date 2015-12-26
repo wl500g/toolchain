@@ -100,20 +100,17 @@ diff --git a/test/pthread/tst-atfork.c b/test/pthread/tst-atfork.c
 new file mode 100644
 --- /dev/null
 +++ b/test/pthread/tst-atfork.c
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,24 @@
 +#include <stdio.h>
 +#include <unistd.h>
 +#include <dlfcn.h>
-+
-+#define __NO_TESTCODE__
-+#include "../testsuite.h"
 +
 +int main(int argc, char *argv[])
 +{
 +    void *h;
 +    pid_t pid;
 +
-+    h = dlopen("./libatfork"_SO_EXT, RTLD_NOW);
++    h = dlopen("./libatfork.so"_SO_EXT1, RTLD_NOW);
 +    if (!h)
 +    {
 +        printf("Failed to open libatfork.so\n");
