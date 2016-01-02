@@ -13,7 +13,7 @@ Refs.:
  http://bugs.busybox.net/show_bug.cgi?id=8211
  http://sourceware.org/bugzilla/show_bug.cgi?id=13502
 
-Add test-case.
+Add test-case, enable cleanup for NPTL only.
 
 Signed-off-by: John Ata <john.ata@baesystems.com>
 Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
@@ -21,11 +21,13 @@ Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
 diff --git a/libc/stdlib/_atexit.c b/libc/stdlib/_atexit.c
 --- a/libc/stdlib/_atexit.c
 +++ b/libc/stdlib/_atexit.c
-@@ -42,6 +42,7 @@
+@@ -42,6 +42,9 @@
  #include <stdlib.h>
  #include <errno.h>
  #include <atomic.h>
-+#include <fork.h>
++#if defined __UCLIBC_HAS_THREADS__ && defined __UCLIBC_HAS_THREADS_NATIVE__
++# include <fork.h>
++#endif
  
  #include <bits/uClibc_mutex.h>
  __UCLIBC_MUTEX_EXTERN(__atexit_lock) attribute_hidden;
@@ -49,25 +51,40 @@ diff --git a/libc/stdlib/_atexit.c b/libc/stdlib/_atexit.c
  }
  #endif
  
-diff --git a/test/pthread/Makefile.in b/test/pthread/Makefile.in
---- a/test/pthread/Makefile.in
-+++ b/test/pthread/Makefile.in
-@@ -6,3 +6,11 @@ TESTS_DISABLED += cancellation-points
- EXTRA_LDFLAGS := -lpthread
+diff --git a/test/nptl/Makefile.in b/test/nptl/Makefile.in
+--- a/test/nptl/Makefile.in
++++ b/test/nptl/Makefile.in
+@@ -42,7 +42,7 @@ TESTS := tst-align tst-align2 tst-atfork1 tst-attr1 tst-attr2 tst-attr3	\
+ 	tst-cleanupx2 tst-cleanupx3 tst-cleanupx4 tst-cond22 tst-cond23 \
+ 	tst-dlsym1 tst-getpid1 tst-getpid2 tst-getpid3 tst-join6 tst-tsd6 \
+ 	tst-oddstacklimit tst-oncex3 tst-oncex4 tst-rwlock2a  \
+-	tst-basic7 tst-fini1 tst-signal7 \
++	tst-atfork2 tst-basic7 tst-fini1 tst-signal7 \
+ 	tst-unload tst-vfork1x tst-vfork2x tst-sem10 tst-sem11 tst-sem12 \
+ 	tst-typesizes tst-initializers1-c89 tst-initializers1-c99 \
+ 	tst-initializers1-gnu89 tst-initializers1-gnu99
+@@ -151,6 +151,7 @@ CFLAGS_tst-initializers1-gnu99 = $(CFLAGS-tst-initializers1) -std=gnu99
  
- LDFLAGS_cancellation-points := -lrt
+ EXTRA_LDFLAGS = $(if $(findstring -lpthread,$(LDFLAGS_$@)),,-lpthread)
+ 
++LDFLAGS_tst-atfork2 := -ldl
+ LDFLAGS_tst-cleanup4 := tst-cleanup4aux.o
+ LDFLAGS_tst-cleanupx4 := tst-cleanup4aux.o
+ LDFLAGS_tst-clock2 := -lrt
+@@ -207,6 +208,9 @@ tst-tls5: tst-tls5mod.so
+ tst-cleanupx4 : tst-cleanup4aux.o
+ tst-fini1: tst-fini1mod.so
+ 
++tst-atfork2: libatfork.so
++tst-atfork2_glibc: libatfork.so.glibc
 +
-+# exclude shared
-+TESTS_DISABLED += libatfork
-+
-+tst-atfork: libatfork.so
-+tst-atfork_glibc: libatfork.so.glibc
-+LDFLAGS_tst-atfork := -ldl
-+LDFLAGS_libatfork.so := -lpthread
-diff --git a/test/pthread/libatfork.c b/test/pthread/libatfork.c
+ OPTS_tst-cancel7 = --command ./tst-cancel7
+ OPTS_tst-mqueue7 = -- ./tst-mqueue7
+ OPTS_tst-exec4 = ./tst-exec4
+diff --git a/test/nptl/libatfork.c b/test/nptl/libatfork.c
 new file mode 100644
 --- /dev/null
-+++ b/test/pthread/libatfork.c
++++ b/test/nptl/libatfork.c
 @@ -0,0 +1,27 @@
 +#include <stdio.h>
 +#include <pthread.h>
@@ -96,10 +113,10 @@ new file mode 100644
 +{
 +    /*  nothing to do  */
 +}
-diff --git a/test/pthread/tst-atfork.c b/test/pthread/tst-atfork.c
+diff --git a/test/nptl/tst-atfork2.c b/test/nptl/tst-atfork2.c
 new file mode 100644
 --- /dev/null
-+++ b/test/pthread/tst-atfork.c
++++ b/test/nptl/tst-atfork2.c
 @@ -0,0 +1,24 @@
 +#include <stdio.h>
 +#include <unistd.h>
