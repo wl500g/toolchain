@@ -12,9 +12,17 @@ choice
 
 	config UCLIBC_VERSION_0_9_33
 		bool "uClibc 0.9.33.2"
+
+	config UCLIBC_VERSION_1_0_10
+		bool "uClibc-ng 1.0.10 (EXPERIMENTAL)"
+		select UCLIBC_NG
 endchoice
 
+config UCLIBC_NG
+	bool
+	default n
 
 config UCLIBC_ENABLE_DEBUG
 	bool "Build with debug information"
 	default n
+

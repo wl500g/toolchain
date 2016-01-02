@@ -1,0 +1,160 @@
+1) tst-cancel4 - use SUN_LEN() macro
+
+2) More glibc tests enabled via simple pthreadP.h wrapper
+
+diff --git a/test/nptl/Makefile.in b/test/nptl/Makefile.in
+--- a/test/nptl/Makefile.in
++++ b/test/nptl/Makefile.in
+@@ -69,6 +69,7 @@ GLIBC_TESTS_DISABLED := tst-eintr1_glibc tst-eintr2_glibc \
+ 	tst-getpid1_glibc tst-getpid2_glibc \
+ 	tst-sem11_glibc tst-sem12_glibc
+ 
++HOST_CFLAGS += -Iglibc-include
+ 
+ ifeq ($(HAVE_SHARED),)
+ TESTS_DISABLED += tst-tls3 tst-tls4 tst-tls5
+@@ -203,13 +204,13 @@
+ tst-cleanup4aux.o:
+ 	$(Q)$(CC) $(CFLAGS) $(CFLAGS_$@) $(EXTRA_CFLAGS) -c tst-cleanup4aux.c -o $@
+ 
+-tst-cleanup4: tst-cleanup4aux.o
++tst-cleanup4 tst-cleanup4_glibc: tst-cleanup4aux.o
+ tst-tls3: tst-tls3mod.so
+ tst-tls4: tst-tls4moda.so tst-tls4modb.so
+ tst-tls5: tst-tls5mod.so
+ 
+ tst-cleanupx4 : tst-cleanup4aux.o
+-tst-fini1: tst-fini1mod.so
++tst-fini1 tst-fini1_glibc: tst-fini1mod.so
+ 
+ tst-atfork2: libatfork.so
+ tst-atfork2_glibc: libatfork.so.glibc
+diff --git b/test/nptl/glibc-include/pthreadP.h b/test/nptl/glibc-include/pthreadP.h
+new file mode 100644
+--- /dev/null
++++ b/test/nptl/glibc-include/pthreadP.h
+@@ -0,0 +1,11 @@
++/* Wrapper for glibc tests */
++
++#ifndef _PTHREADP_H
++#define _PTHREADP_H	1
++
++#include <pthread.h>
++
++/* The signal used for asynchronous cancelation.  */
++#define SIGCANCEL       __SIGRTMIN
++
++#endif	/* pthreadP.h */
+diff --git a/test/nptl/tst-cancel4.c b/test/nptl/tst-cancel4.c
+--- a/test/nptl/tst-cancel4.c
++++ b/test/nptl/tst-cancel4.c
+@@ -760,7 +783,11 @@ tf_sigpause (void *arg)
+ 
+   pthread_cleanup_push (cl, NULL);
+ 
++#ifdef SIGCANCEL
+   sigpause (SIGCANCEL);
++#else
++  pause ();
++#endif
+ 
+   pthread_cleanup_pop (0);
+ 
+@@ -1031,16 +1032,14 @@
+ 	}
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
+-
+-  unlink (sun.sun_path);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+ 
+   listen (tempfd, 5);
+ 
+   socklen_t len = sizeof (sun);
+ 
++  unlink (sun.sun_path);
++
+   int r = pthread_barrier_wait (&b2);
+   if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
+     {
+@@ -1099,9 +1098,7 @@
+ 	}
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+ 
+   listen (tempfd, 5);
+ 
+@@ -1181,9 +1178,7 @@
+ 	}
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+ 
+   listen (tempfd, 5);
+ 
+@@ -1262,9 +1257,7 @@
+ 	}
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+ 
+   tempfname = strdup (sun.sun_path);
+ 
+@@ -1339,9 +1332,7 @@
+ 	}
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+ 
+   tempfname = strdup (sun.sun_path);
+ 
+@@ -1722,9 +1713,7 @@
+ 	}
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+   tempfname = strdup (sun.sun_path);
+ 
+   tempfd2 = socket (AF_UNIX, SOCK_DGRAM, 0);
+@@ -1800,9 +1789,7 @@
+ 	}
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+   tempfname = strdup (sun.sun_path);
+ 
+   tempfd2 = socket (AF_UNIX, SOCK_DGRAM, 0);
+@@ -1922,9 +1909,7 @@
+ 	}
+       sun.sun_family = AF_UNIX;
+     }
+-  while (bind (tempfd, (struct sockaddr *) &sun,
+-	       offsetof (struct sockaddr_un, sun_path)
+-	       + strlen (sun.sun_path) + 1) != 0);
++  while (bind (tempfd, (struct sockaddr *) &sun, SUN_LEN(&sun)) != 0);
+   tempfname = strdup (sun.sun_path);
+ 
+   listen (tempfd, 5);
+-- 

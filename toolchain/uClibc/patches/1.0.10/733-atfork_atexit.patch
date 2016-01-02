@@ -1,0 +1,146 @@
+pthread_atfork handlers not removed during dlclose
+
+Invoke pthread_atfork handler cleanup when removing the associated DSO...
+
+If a program loads a DSO (dlopen) that sets up a pthread_atfork handler(s), and
+then subsequently closes the DSO, the handler(s) are left in place.  If fork()
+is subsequently called, the handlers are invoked even though the DSO has been
+removed causing crashes or unpredictable code execution.  This is because the
+code in __cxa_finalize(atexit.c)to invoke the unregister_atfork() routine is
+ifdef'd out with the comment that it hasn't been "looked into this yet...".
+
+Refs.:
+ http://bugs.busybox.net/show_bug.cgi?id=8211
+ http://sourceware.org/bugzilla/show_bug.cgi?id=13502
+
+Add test-case, enable cleanup for NPTL only.
+
+Signed-off-by: John Ata <john.ata@baesystems.com>
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+diff --git a/libc/stdlib/_atexit.c b/libc/stdlib/_atexit.c
+--- a/libc/stdlib/_atexit.c
++++ b/libc/stdlib/_atexit.c
+@@ -42,6 +42,9 @@
+ #include <stdlib.h>
+ #include <errno.h>
+ #include <atomic.h>
++#if defined __UCLIBC_HAS_THREADS__ && defined __UCLIBC_HAS_THREADS_NATIVE__
++# include <fork.h>
++#endif
+ 
+ #include <bits/uClibc_mutex.h>
+ __UCLIBC_MUTEX_EXTERN(__atexit_lock) attribute_hidden;
+@@ -207,17 +208,15 @@
+         }
+     }
+ 
+-#if 0 /* haven't looked into this yet... */
+     /*
+      * Remove the registered fork handlers. We do not have to
+      * unregister anything if the program is going to terminate anyway.
+      */
+ #ifdef UNREGISTER_ATFORK
+-    if (d != NULL) {
+-        UNREGISTER_ATFORK(d);
++    if (dso_handle != NULL) {
++        UNREGISTER_ATFORK(dso_handle);
+     }
+ #endif
+-#endif
+ }
+ #endif
+ 
+diff --git a/test/nptl/Makefile.in b/test/nptl/Makefile.in
+--- a/test/nptl/Makefile.in
++++ b/test/nptl/Makefile.in
+@@ -42,7 +42,8 @@ TESTS := tst-align tst-align2 tst-atfork1 tst-attr1 tst-attr2 tst-attr3	\
+ 
+ 	tst-basic7 tst-signal7 tst-vfork1x tst-vfork2x tst-sem10 tst-sem11 \
+ 	tst-sem12 tst-typesizes tst-initializers1-c89 tst-initializers1-c99 \
+-	tst-initializers1-gnu89 tst-initializers1-gnu99
++	tst-initializers1-gnu89 tst-initializers1-gnu99 \
++	tst-atfork2
+ 
+ #
+ # These are for the RT library and POSIX timers.
+@@ -151,6 +151,7 @@ CFLAGS_tst-initializers1-gnu99 = $(CFLAGS-tst-initializers1) -std=gnu99
+ 
+ EXTRA_LDFLAGS = $(if $(findstring -lpthread,$(LDFLAGS_$@)),,-lpthread)
+ 
++LDFLAGS_tst-atfork2 := -ldl
+ LDFLAGS_tst-cleanup4 := tst-cleanup4aux.o
+ LDFLAGS_tst-cleanupx4 := tst-cleanup4aux.o
+ LDFLAGS_tst-clock2 := -lrt
+@@ -207,6 +208,9 @@ tst-tls5: tst-tls5mod.so
+ tst-cleanupx4 : tst-cleanup4aux.o
+ tst-fini1: tst-fini1mod.so
+ 
++tst-atfork2: libatfork.so
++tst-atfork2_glibc: libatfork.so.glibc
++
+ OPTS_tst-cancel7 = -c ./tst-cancel7
+ OPTS_tst-mqueue7 = -- ./tst-mqueue7
+ OPTS_tst-exec4 = ./tst-exec4
+diff --git a/test/nptl/libatfork.c b/test/nptl/libatfork.c
+new file mode 100644
+--- /dev/null
++++ b/test/nptl/libatfork.c
+@@ -0,0 +1,27 @@
++#include <stdio.h>
++#include <pthread.h>
++
++static void atfork_prepare(void)
++{
++    /*  nothing to do  */
++}
++
++static void atfork_parent(void)
++{
++    /*  nothing to do  */
++}
++
++static void atfork_child(void)
++{
++    /*  nothing to do  */
++}
++
++static __attribute__((constructor)) void init(void)
++{
++    pthread_atfork(atfork_prepare, atfork_parent, atfork_child);
++}
++
++static __attribute__((destructor)) void done(void)
++{
++    /*  nothing to do  */
++}
+diff --git a/test/nptl/tst-atfork2.c b/test/nptl/tst-atfork2.c
+new file mode 100644
+--- /dev/null
++++ b/test/nptl/tst-atfork2.c
+@@ -0,0 +1,24 @@
++#include <stdio.h>
++#include <unistd.h>
++#include <dlfcn.h>
++
++int main(int argc, char *argv[])
++{
++    void *h;
++    pid_t pid;
++
++    h = dlopen("./libatfork.so"_SO_EXT1, RTLD_NOW);
++    if (!h)
++    {
++        printf("Failed to open libatfork.so\n");
++        return 1;
++    }
++    dlclose(h);
++
++    if ((pid = fork()) < 0) {
++	printf("Fork failed\n");
++        return 1;
++    }
++
++    return 0;
++}
+-- 

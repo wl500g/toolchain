@@ -7,21 +7,25 @@
 include $(TOPDIR)/rules.mk
 #include $(INCLUDE_DIR)/target.mk
 
-PKG_NAME:=uClibc
 PKG_VERSION:=$(call qstrip,$(CONFIG_UCLIBC_VERSION))
 PKG_VERSION_SNAPSHOT:=$(call qstrip,$(CONFIG_UCLIBC_VERSION_SNAPSHOT))
-ifeq ($(PKG_VERSION_SNAPSHOT),y)
-PKG_SOURCE_URL:=http://www.uclibc.org/downloads/snapshots
+ifeq ($(call qstrip,$(CONFIG_UCLIBC_NG)),y)
+PKG_NAME:=uClibc-ng
+PKG_SOURCE_URL:=http://downloads.uclibc-ng.org/releases/$(PKG_VERSION)/
 else
+PKG_NAME:=uClibc
 PKG_SOURCE_URL:=http://www.uclibc.org/downloads
+ifeq ($(PKG_VERSION_SNAPSHOT),y)
+PKG_SOURCE_URL:=$(PKG_SOURCE_URL)/snapshots
+endif
 endif
 PATCH_DIR:=./patches/$(PKG_VERSION)
 CONFIG_DIR:=./config/$(PKG_VERSION)
-PKG_SOURCE:=uClibc-$(PKG_VERSION).tar.bz2
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.xz
 
 STAGING_DIR_HOST:=$(TOOLCHAIN_DIR)
 BUILD_DIR_HOST:=$(BUILD_DIR_TOOLCHAIN)
-PKG_BUILD_DIR:=$(BUILD_DIR_HOST)/uClibc-$(PKG_VERSION)
+PKG_BUILD_DIR:=$(BUILD_DIR_HOST)/$(PKG_NAME)-$(PKG_VERSION)
 
 include $(INCLUDE_DIR)/host-build.mk
 
@@ -51,13 +55,13 @@ GEN_CONFIG=$(SCRIPT_DIR)/kconfig.pl -n \
 define Build/Prepare/Snapshot
 	$(PKG_UNPACK)
 	rm -Rf $(PKG_BUILD_DIR)
-	ln -snf $(BUILD_DIR_TOOLCHAIN)/uClibc $(PKG_BUILD_DIR)
+	ln -snf $(BUILD_DIR_TOOLCHAIN)/$(PKG_NAME) $(PKG_BUILD_DIR)
 	$(Build/Patch)
 	$(if $(QUILT),touch $(PKG_BUILD_DIR)/.quilt_used)
 endef
 
 define Build/Prepare
-	@echo prepare uClibc version $(PKG_VERSION)
+	@echo prepare $(PKG_NAME) version $(PKG_VERSION)
 ifeq ($(PKG_VERSION_SNAPSHOT),y)
 	$(call Build/Prepare/Snapshot)
 else

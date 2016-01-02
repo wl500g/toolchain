@@ -1,0 +1,68 @@
+test: Minor fixes
+
+1) Fix timeout setup for tst-regex2
+
+2) Don't stop on a first failed test
+
+3) Fix test-skeleton.c faults on empty command line & glibc tests
+
+4) Properly define MAKE_SRCS
+
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+diff --git a/test/Test.mak b/test/Test.mak
+--- a/test/Test.mak
++++ b/test/Test.mak
+@@ -75,7 +75,6 @@ define exec_test
+ 		echo "ret == $$ret ; expected_ret == $$expected_ret" ; \
+ 		echo "The output of the failed test is:"; \
+ 		cat "$(binary_name).out"; \
+-		exit 1 ; \
+ 	fi
+ 	$(SCAT) "$(binary_name).out"
+ endef
+@@ -116,7 +116,7 @@ compile: $(COMPILE_TARGETS)
+ G_TARGET_SRCS := $(addsuffix .c,$(G_TARGETS))
+ U_TARGET_SRCS := $(addsuffix .c,$(U_TARGETS))
+ 
+-$(MAKE_SRCS): Makefile $(TESTDIR)Makefile $(TESTDIR)Rules.mak $(TESTDIR)Test.mak
++MAKE_SRCS := $(wildcard Makefile.in) $(TESTDIR)Rules.mak $(TESTDIR)Test.mak
+ 
+ $(U_TARGETS): $(U_TARGET_SRCS) $(MAKE_SRCS)
+ 	$(showlink)
+diff --git b/test/regex/Makefile.in b/test/regex/Makefile.in
+--- a/test/regex/Makefile.in
++++ b/test/regex/Makefile.in
+@@ -1,1 +1,3 @@
+ CFLAGS_tst-regex2 = -fPIC
++
++WRAPPER := env TIMEOUTFACTOR=50
+diff --git a/test/regex/tst-regex2.c b/test/regex/tst-regex2.c
+--- a/test/regex/tst-regex2.c
++++ b/test/regex/tst-regex2.c
+@@ -245,6 +245,5 @@ do_test(void)
+ 	return exitcode;
+ }
+ 
+-#define TIMEOUT 20
+ #define TEST_FUNCTION do_test()
+ #include "../test-skeleton.c"
+diff --git a/test/test-skeleton.c b/test/test-skeleton.c
+--- a/test/test-skeleton.c
++++ b/test/test-skeleton.c
+@@ -289,9 +289,11 @@ main (int argc, char *argv[])
+   atexit (delete_temp_files);
+ 
+   /* Correct for the possible parameters.  */
+-  argv[optind - 1] = argv[0];
+-  argv += optind - 1;
+-  argc -= optind - 1;
++  if (optind > argc) {
++    argv[optind - 1] = argv[0];
++    argv += optind - 1;
++    argc -= optind - 1;
++  }
+ 
+   /* Call the initializing function, if one is available.  */
+ #ifdef PREPARE

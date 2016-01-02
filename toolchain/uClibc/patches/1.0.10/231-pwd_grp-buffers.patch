@@ -1,0 +1,66 @@
+libc/pwd_grp: Allocate buffers for non-reentrant functions dynamically
+
+ Saves 3k bss with default buffer size(256).
+
+   text	   data	    bss	    dec	    hex	filename
+-    61	      0	    272	    333	    14d	fgetgrent.os
+-    61	      0	    284	    345	    159	fgetpwent.os
+-    61	      0	    292	    353	    161	fgetspent.os
+-    57	      0	    272	    329	    149	getgrent.os
+-    61	      0	    272	    333	    14d	getgrgid.os
+-    61	      0	    272	    333	    14d	getgrnam.os
+-    57	      0	    284	    341	    155	getpwent.os
+-    61	      0	    284	    345	    159	getpwnam.os
+-    61	      0	    284	    345	    159	getpwuid.os
+-    57	      0	    292	    349	    15d	getspent.os
+-    61	      0	    292	    353	    161	getspnam.os
+-    61	      0	    292	    353	    161	sgetspent.os
++    94	      0	     20	    114	     72	fgetgrent.os
++    94	      0	     32	    126	     7e	fgetpwent.os
++    94	      0	     40	    134	     86	fgetspent.os
++    87	      0	     20	    107	     6b	getgrent.os
++    94	      0	     20	    114	     72	getgrgid.os
++    94	      0	     20	    114	     72	getgrnam.os
++    87	      0	     32	    119	     77	getpwent.os
++    94	      0	     32	    126	     7e	getpwnam.os
++    94	      0	     32	    126	     7e	getpwuid.os
++    87	      0	     40	    127	     7f	getspent.os
++    94	      0	     40	    134	     86	getspnam.os
++    94	      0	     40	    134	     86	sgetspent.os
+=====================================================
+   +387           -3024
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+diff --git a/libc/pwd_grp/pwd_grp_internal.c b/libc/pwd_grp/pwd_grp_internal.c
+--- a/libc/pwd_grp/pwd_grp_internal.c
++++ b/libc/pwd_grp/pwd_grp_internal.c
+@@ -26,6 +26,7 @@
+ #include <string.h>
+ #include <stddef.h>
+ #include <errno.h>
++#include <malloc.h>
+ #include <assert.h>
+ #include <ctype.h>
+ #include <pwd.h>
+@@ -95,14 +96,17 @@ libc_hidden_def(GETXXKEY_R_FUNC)
+ 
+ GETXXKEY_ENTTYPE *GETXXKEY_FUNC(GETXXKEY_ADD_PARAMS)
+ {
+-	static char buffer[GETXXKEY_BUFLEN];
++	static char *buffer = NULL;
+ 	static GETXXKEY_ENTTYPE resultbuf;
+ 	GETXXKEY_ENTTYPE *result;
+ 
++	if (buffer == NULL)
++		buffer = (char *)__uc_malloc(GETXXKEY_BUFLEN);
++
+ # ifdef GETXXKEY_ADD_VARIABLES
+-	REENTRANT_NAME(GETXXKEY_ADD_VARIABLES, &resultbuf, buffer, sizeof(buffer), &result);
++	REENTRANT_NAME(GETXXKEY_ADD_VARIABLES, &resultbuf, buffer, GETXXKEY_BUFLEN, &result);
+ # else
+-	REENTRANT_NAME(&resultbuf, buffer, sizeof(buffer), &result);
++	REENTRANT_NAME(&resultbuf, buffer, GETXXKEY_BUFLEN, &result);
+ # endif
+ 	return result;
+ }
