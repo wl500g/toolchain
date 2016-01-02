@@ -1,7 +1,6 @@
 #
-# Automatically generated make config: don't edit
-# toolchain version: (4d99523)
-# Sat Nov 14 11:29:58 2015
+# Automatically generated file; DO NOT EDIT.
+# Toolchain Configuration
 #
 CONFIG_HAVE_DOT_CONFIG=y
 CONFIG_TARGET_BOARD="brcm-2.6"
@@ -27,7 +26,6 @@ CONFIG_SSP_SUPPORT=y
 CONFIG_TLS_SUPPORT=y
 CONFIG_INSTALL_LIBSTDCPP=y
 # CONFIG_UCLIBC_VERSION_SNAPSHOT is not set
-# CONFIG_UCLIBC_VERSION_0_9_32 is not set
 CONFIG_UCLIBC_VERSION_0_9_33=y
 # CONFIG_UCLIBC_ENABLE_DEBUG is not set
 # CONFIG_GDB is not set
