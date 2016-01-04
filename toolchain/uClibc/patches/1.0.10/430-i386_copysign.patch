@@ -8,12 +8,12 @@
  	__longjmp.S setjmp.S bsd-setjmp.S bsd-_setjmp.S \
 -	sync_file_range.S syscall.S mmap.S
 +	sync_file_range.S syscall.S mmap.S \
-+	s_copysign.S s_copysignf.S s_copysignl.S
++	copysign.S
  
  SSRC-$(UCLIBC_HAS_LFS) += mmap64.S
 --- /dev/null
-+++ b/libc/sysdeps/linux/i386/s_copysign.S
-@@ -0,0 +1,25 @@
++++ b/libc/sysdeps/linux/i386/copysign.S
+@@ -0,0 +1,55 @@
 +/*
 + * Written by J.T. Conklin <jtc@netbsd.org>.
 + * Public domain.
@@ -39,19 +39,6 @@
 +
 +libc_hidden_def(copysign)
 +
---- /dev/null
-+++ b/libc/sysdeps/linux/i386/s_copysignf.S
-@@ -0,0 +1,25 @@
-+/*
-+ * Written by J.T. Conklin <jtc@netbsd.org>.
-+ * Public domain.
-+ */
-+
-+#define _ERRNO_H	1
-+#include <features.h>
-+#include <bits/errno.h>
-+
-+.text
 +.global copysignf
 +.type   copysignf,%function
 +copysignf:
@@ -67,20 +54,6 @@
 +
 +libc_hidden_def(copysignf)
 +
---- /dev/null
-+++ b/libc/sysdeps/linux/i386/s_copysignl.S
-@@ -0,0 +1,26 @@
-+/*
-+ * Written by J.T. Conklin <jtc@netbsd.org>.
-+ * Changes for long double by Ulrich Drepper <drepper@cygnus.com>
-+ * Public domain.
-+ */
-+
-+#define _ERRNO_H	1
-+#include <features.h>
-+#include <bits/errno.h>
-+
-+.text
 +.global copysignl
 +.type   copysignl,%function
 +copysignl:

@@ -1,7 +1,13 @@
-[toolchain] uClibc: fix errno access in pthreads (#8166, #8177)
+fix errno access in pthreads (#8166, #8177)
+
 Reading errno within pthreads always resulted in 0 breaking various programs
 like transmission and collectd. This patch is not 100% thread safe but it brings
 back threading into a usable state for now.
+
+Ref.:
+ https://bugs.busybox.net/show_bug.cgi?id=2089
+
+ OpenWRT patch
 
 --- a/libpthread/linuxthreads.old/errno.c
 +++ b/libpthread/linuxthreads.old/errno.c

@@ -1,6 +1,6 @@
 uClibc: use position independent code for crt1, slightly reduces size of all executables
 
-Signed-off-by: Felix Fietkau
+Signed-off-by: Felix Fietkau <nbd@openwrt.org>
 
 --- a/libc/sysdeps/linux/mips/Makefile.arch
 +++ b/libc/sysdeps/linux/mips/Makefile.arch

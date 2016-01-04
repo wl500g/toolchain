@@ -1,3 +1,7 @@
+fix infinite recursion on application exit triggered by linking libc before libpthread
+
+ OpenWRT patch
+
 --- a/libpthread/nptl/cleanup_defer_compat.c
 +++ b/libpthread/nptl/cleanup_defer_compat.c
 @@ -22,7 +22,7 @@
