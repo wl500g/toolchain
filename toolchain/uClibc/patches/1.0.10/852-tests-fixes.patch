@@ -58,7 +58,7 @@ diff --git a/test/test-skeleton.c b/test/test-skeleton.c
 -  argv[optind - 1] = argv[0];
 -  argv += optind - 1;
 -  argc -= optind - 1;
-+  if (optind > argc) {
++  if (optind > 1) {
 +    argv[optind - 1] = argv[0];
 +    argv += optind - 1;
 +    argc -= optind - 1;
