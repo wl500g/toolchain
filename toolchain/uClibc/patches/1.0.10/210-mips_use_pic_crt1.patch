@@ -1,4 +1,4 @@
-uClibc: use position independent code for crt1, slightly reduces size of all executables
+use position independent code for crt1, slightly reduces size of all executables
 
 Signed-off-by: Felix Fietkau <nbd@openwrt.org>
 

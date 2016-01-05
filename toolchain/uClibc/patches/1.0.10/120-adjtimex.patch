@@ -1,3 +1,7 @@
+Provide __adjtimex(), like glibc.
+
+For example, ntpd want it, see http://bugs.ntp.org/show_bug.cgi?id=769
+
  OpenWRT patch
 
 --- a/include/sys/timex.h
