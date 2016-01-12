@@ -57,11 +57,11 @@ diff --git a/test/Test.mak b/test/Test.mak
 +%.so.glibc: %.c
 +	$(showlink)
 +	$(Q)$(HOSTCC) \
-+ 		$(filter-out $(HOST_CFLAGS-OMIT-$<),$(HOST_CFLAGS)) \
-+		$(CFLAGS_$(patsubst %_glibc,%,$<)) \
++		$(filter-out $(CFLAGS-OMIT-$<),$(HOST_CFLAGS)) \
++		$(CFLAGS_$(patsubst %.glibc,%,$@)) \
 +		-fPIC -shared $< -o $@ -Wl,-soname,$@ \
-+		$(filter-out $(HOST_LDFLAGS-OMIT-$(patsubst %_glibc,%,$@)),$(HOST_LDFLAGS)) $(EXTRA_LIBS) \
-+		$(patsubst %.so,%.so.glibc,$(LDFLAGS_$(patsubst %_glibc,%,$@)))
++		$(filter-out $(LDFLAGS-OMIT-$(patsubst %.glibc,%,$@)),$(HOST_LDFLAGS)) $(EXTRA_LIBS) \
++		$(patsubst %.so,%.so.glibc,$(LDFLAGS_$(patsubst %.glibc,%,$@)))
  
  clean:
  	$(showclean)
