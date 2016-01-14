@@ -1,0 +1,132 @@
+ldso: fix dlsym hang when reloading DSOs
+
+It can happen under certain cases that the DSO had refcount 0,
+but was already loaded. (NODELETE flag is set, or it is pulled
+in via both NEEDED dependency and explicit dlopen()).
+
+In these cases we must not re-add the DSO to the global symbol
+scope as it is already there. Or we end up corrupting the linked
+list and further dlsym lookups will hang.
+
+Signed-off-by: Timo Teräs <timo.teras@iki.fi>
+
+Ref.: http://lists.uclibc.org/pipermail/uclibc/2013-June/047819.html
+
+---
+
+diff --git a/ldso/libdl/libdl.c b/ldso/libdl/libdl.c
+--- a/ldso/libdl/libdl.c
++++ b/ldso/libdl/libdl.c
+@@ -543,15 +543,23 @@ static void *do_dlopen(const char *libname, int flag, ElfW(Addr) from)
+
+ #ifdef SHARED
+	/*
+-	 * Get the tail of the list.
+ 	 * In the static case doesn't need to extend the global scope, it is
+ 	 * ready to be used as it is, because _dl_loaded_modules already points
+ 	 * to the dlopened library.
++	 *
++	 * Extend the global scope by adding the local scope of the dlopened DSO.
++	 * But only if it's not there. It can happen under certain cases that the
++	 * DSO had refcount = 0, but was already loaded. (NODELETE flag is set, or
++	 * it is pulled in via both NEEDED dependency and explicit dlopen()).
+ 	 */
+-	for (ls = &_dl_loaded_modules->symbol_scope; ls && ls->next; ls = ls->next);
+-
+-	/* Extend the global scope by adding the local scope of the dlopened DSO. */
+-	ls->next = &dyn_chain->dyn->symbol_scope;
++	for (ls = &_dl_loaded_modules->symbol_scope; ; ls = ls->next) {
++		if (ls == &dyn_chain->dyn->symbol_scope)
++			break;
++		if (ls->next == NULL) {
++			ls->next = &dyn_chain->dyn->symbol_scope;
++			break;
++		}
++	}
+ #endif
+ #ifdef __mips__
+	/*
+diff --git a/test/dlopen/Makefile.in b/test/dlopen/Makefile.in
+--- a/test/dlopen/Makefile.in
++++ b/test/dlopen/Makefile.in
+@@ -5,7 +5,7 @@
+ #export UCLIBC_ONLY := 1
+ 
+ TESTS := dltest dltest2 dlstatic test1 test2 test3 dlundef dlafk dladdr \
+-	nodelete
++	nodelete nodelete1
+ 
+ ifneq ($(HAVE_SHARED),y)
+ TESTS_DISABLED := test3
+@@ -79,3 +79,6 @@ LDFLAGS_nodelete := -rdynamic -ldl
+ LDFLAGS_nodelmod1.so := -Wl,-z,nodelete
+ LDFLAGS_nodelmod3.so := ./nodelmod4.so
+ LDFLAGS_nodelmod4.so := -Wl,-z,nodelete
++nodelete1: nodelmod1.so nodelmod2.so
++nodelete1_glibc: nodelmod1.so.glibc nodelmod2.so.glibc
++LDFLAGS_nodelete1 := -rdynamic -ldl
+diff --git a/test/dlopen/nodelete1.c b/test/dlopen/nodelete1.c
+new file mode 100644
+--- /dev/null
++++ b/test/dlopen/nodelete1.c
+@@ -0,0 +1,59 @@
++#include <dlfcn.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++
++int fini_ran;
++
++#define LIBNAME1	"nodelmod1.so"_SO_EXT1
++
++static int
++do_test (void)
++{
++  /* Verify ability to reload RTLD_NODELETE libraries.
++   */
++  void *p;
++
++  p = dlopen (LIBNAME1, RTLD_NOW);
++  if (p == NULL)
++  {
++      printf ("failed to load "LIBNAME1": %s\n", dlerror ());
++      exit (1);
++  }
++
++  if (dlclose (p) != 0)
++  {
++      puts ("failed to close "LIBNAME1"");
++      exit (1);
++  }
++
++  p = dlopen (LIBNAME1, RTLD_LAZY);
++  if (p == NULL)
++  {
++      printf ("failed to load "LIBNAME1": %s\n", dlerror ());
++      exit (1);
++  }
++
++  if (dlclose (p) != 0)
++  {
++      puts ("failed to close "LIBNAME1"");
++      exit (1);
++  }
++
++  p = dlopen ("nodelmod2.so"_SO_EXT1, RTLD_LAZY);
++  if (p == NULL)
++  {
++      printf ("failed to load \"nodelmod2.so\": %s\n", dlerror ());
++      exit (1);
++  }
++  if (dlclose (p) != 0)
++  {
++      puts ("failed to close \"nodelmod2.so\"");
++      exit (1);
++  }
++
++  return 0;
++}
++
++#define TEST_FUNCTION do_test ()
++#include "../test-skeleton.c"
+-- 

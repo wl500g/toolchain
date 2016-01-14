@@ -9,8 +9,8 @@ diff --git a/test/dlopen/Makefile.in b/test/dlopen/Makefile.in
  export UCLIBC_ONLY := 1
  
  TESTS := dltest dltest2 dlstatic test1 test2 test3 dlundef dlafk dladdr \
--	nodelete
-+	constload1 nodelete
+-	nodelete nodelete1
++	constload1 nodelete nodelete1
  
  ifneq ($(HAVE_SHARED),y)
  TESTS_DISABLED := test3
