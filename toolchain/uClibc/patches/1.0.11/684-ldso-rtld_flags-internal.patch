@@ -1,0 +1,184 @@
+ldso: Use single rtld_flags interpretation through all the calls
+
+Implement single rtld_flags interpretation through all the 
+do_dlopen()/_dl_load_shared_library()/_dl_load_elf_shared_library()
+calls chain.
+This adds the ability to use the flags, passed to dlopen(), in all
+underlaying functions and implement rtld_flags inheritance.
+Saves a few bytes code.
+
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+diff --git a/include/dlfcn.h b/include/dlfcn.h
+--- a/include/dlfcn.h
++++ b/include/dlfcn.h
+@@ -26,6 +26,9 @@
+ /* Collect various system dependent definitions and declarations.  */
+ #include <bits/dlfcn.h>
+ 
++/* Internally used flag.  */
++#define __RTLD_SECURE	0x04000000 /* Apply additional security checks.  */
++
+ 
+ #ifdef __USE_GNU
+ /* If the first argument of `dlsym' or `dlvsym' is set to RTLD_NEXT
+diff --git a/ldso/include/dl-elf.h b/ldso/include/dl-elf.h
+--- a/ldso/include/dl-elf.h
++++ b/ldso/include/dl-elf.h
+@@ -29,18 +29,15 @@ static __inline__ void _dl_map_cache(void) { }
+ static __inline__ void _dl_unmap_cache(void) { }
+ #endif
+ 
+-#define DL_RESOLVE_SECURE		0x0001
+-#define DL_RESOLVE_NOLOAD		0x0002
+-
+ /* Function prototypes for non-static stuff in elfinterp.c */
+ extern void _dl_parse_lazy_relocation_information(struct dyn_elf *rpnt,
+ 	unsigned long rel_addr, unsigned long rel_size);
+ extern int _dl_parse_relocation_information(struct dyn_elf *rpnt,
+ 	struct r_scope_elem *scope, unsigned long rel_addr, unsigned long rel_size);
+-extern struct elf_resolve * _dl_load_shared_library(unsigned rflags,
++extern struct elf_resolve * _dl_load_shared_library(unsigned int rflags,
+ 	struct dyn_elf **rpnt, struct elf_resolve *tpnt, char *full_libname,
+ 	int trace_loaded_objects);
+-extern struct elf_resolve * _dl_load_elf_shared_library(unsigned rflags,
++extern struct elf_resolve * _dl_load_elf_shared_library(unsigned int rflags,
+ 	struct dyn_elf **rpnt, const char *libname);
+ extern int _dl_linux_resolve(void);
+ extern int _dl_fixup(struct dyn_elf *rpnt, struct r_scope_elem *scope, int flag);
+diff --git a/ldso/ldso/dl-elf.c b/ldso/ldso/dl-elf.c
+--- a/ldso/ldso/dl-elf.c
++++ b/ldso/ldso/dl-elf.c
+@@ -132,7 +132,7 @@ _dl_protect_relro (struct elf_resolve *l)
+ /* This function's behavior must exactly match that
+  * in uClibc/ldso/util/ldd.c */
+ static struct elf_resolve *
+-search_for_named_library(const char *name, unsigned rflags, const char *path_list,
++search_for_named_library(const char *name, unsigned int rflags, const char *path_list,
+ 	struct dyn_elf **rpnt, const char* origin)
+ {
+ 	char *mylibname;
+@@ -162,7 +162,9 @@ search_for_named_library(const char *name, unsigned rflags, const char *path_lis
+ 
+ 		if (plen >= 7 && _dl_memcmp(p, "$ORIGIN", 7) == 0) {
+ 			int olen;
++			/* $ORIGIN is not expanded for SUID/GUID programs
++			   (except if it is $ORIGIN alone) */
+-			if (rflags && plen != 7)
++			if ((rflags & __RTLD_SECURE) && plen != 7)
+ 				continue;
+ 			if (origin == NULL)
+ 				continue;
+@@ -194,7 +194,7 @@ search_for_named_library(const char *name, unsigned rflags, const char *path_lis
+ unsigned long _dl_error_number;
+ unsigned long _dl_internal_error_number;
+ 
+-struct elf_resolve *_dl_load_shared_library(unsigned rflags, struct dyn_elf **rpnt,
++struct elf_resolve *_dl_load_shared_library(unsigned int rflags, struct dyn_elf **rpnt,
+ 	struct elf_resolve *tpnt, char *full_libname, int attribute_unused trace_loaded_objects)
+ {
+ 	char *pnt;
+@@ -473,7 +473,7 @@ map_writeable (int infile, ElfW(Phdr) *ppnt, int piclib, int flags,
+  * are required.
+  */
+ 
+-struct elf_resolve *_dl_load_elf_shared_library(unsigned rflags,
++struct elf_resolve *_dl_load_elf_shared_library(unsigned int rflags,
+ 	struct dyn_elf **rpnt, const char *libname)
+ {
+ 	ElfW(Ehdr) *epnt;
+@@ -512,7 +512,7 @@ struct elf_resolve *_dl_load_elf_shared_library(unsigned rflags,
+ 	}
+ 	/* If we are in secure mode (i.e. a setuid/gid binary using LD_PRELOAD),
+ 	   we don't load the library if it isn't setuid. */
+-	if (rflags & DL_RESOLVE_SECURE) {
++	if (rflags & __RTLD_SECURE) {
+ 		if (!(st.st_mode & S_ISUID)) {
+ 			_dl_close(infile);
+ 			return NULL;
+@@ -528,7 +528,7 @@ struct elf_resolve *_dl_load_elf_shared_library(unsigned rflags,
+ 			return tpnt;
+ 		}
+ 	}
+-	if (rflags & DL_RESOLVE_NOLOAD) {
++	if (rflags & RTLD_NOLOAD) {
+ 		_dl_close(infile);
+ 		return NULL;
+ 	}
+@@ -792,7 +792,7 @@ struct elf_resolve *_dl_load_elf_shared_library(unsigned rflags,
+ 		DL_RELOC_ADDR(DL_GET_RUN_ADDR(tpnt->loadaddr, tpnt->mapaddr),
+ 		epnt->e_phoff);
+ 	tpnt->n_phent = epnt->e_phnum;
+-	tpnt->rtld_flags |= rtld_flags;
++	tpnt->rtld_flags = rflags | rtld_flags;
+ #ifdef __LDSO_STANDALONE_SUPPORT__
+ 	tpnt->l_entry = epnt->e_entry;
+ #endif
+diff --git a/ldso/ldso/ldso.c b/ldso/ldso/ldso.c
+--- a/ldso/ldso/ldso.c
++++ b/ldso/ldso/ldso.c
+@@ -589,7 +589,8 @@ of this helper program; chances are you did not intend to run this program.\n\
+ 		 * but it could be also a shared object (when ld.so used for tracing)
+ 		 * We keep the misleading app_tpnt name to avoid variable pollution
+ 		 */
+-		app_tpnt = _dl_load_elf_shared_library(_dl_secure, &rpnt, _dl_progname);
++		app_tpnt = _dl_load_elf_shared_library(_dl_secure ? __RTLD_SECURE : 0,
++							&rpnt, _dl_progname);
+ 		if (!app_tpnt) {
+ 			_dl_dprintf(2, "can't load '%s'\n", _dl_progname);
+ 			_dl_exit(16);
+@@ -887,7 +888,7 @@ of this helper program; chances are you did not intend to run this program.\n\
+ 				_dl_if_debug_dprint("\tfile='%s';  needed by '%s'\n", str, _dl_progname);
+ 
+ 				tpnt1 = _dl_load_shared_library(
+-					_dl_secure ? DL_RESOLVE_SECURE : 0,
++					_dl_secure ? __RTLD_SECURE : 0,
+ 					&rpnt, NULL, str, trace_loaded_objects);
+ 				if (!tpnt1) {
+ #ifdef __LDSO_LDD_SUPPORT__
+diff --git a/ldso/libdl/libdl.c b/ldso/libdl/libdl.c
+--- a/ldso/libdl/libdl.c
++++ b/ldso/libdl/libdl.c
+@@ -59,8 +59,6 @@ extern struct link_map *_dl_update_slotinfo(unsigned long int req_modid);
+  * and use a pile of symbols from ldso... */
+ #include <dl-elf.h>
+ #if 0
+-extern struct elf_resolve * _dl_load_shared_library(unsigned, struct dyn_elf **,
+-	struct elf_resolve *, char *, int);
+ extern int _dl_fixup(struct dyn_elf *rpnt, struct r_scope_elem *scope, int lazy);
+ extern void _dl_protect_relro(struct elf_resolve * tpnt);
+ #endif
+@@ -385,7 +383,7 @@ static void *do_dlopen(const char *libname, int flag, ElfW(Addr) from)
+ 	_dl_if_debug_print("Trying to dlopen '%s', RTLD_GLOBAL:%d RTLD_NOW:%d\n",
+ 			(char*)libname, (flag & RTLD_GLOBAL ? 1:0), (now_flag & RTLD_NOW ? 1:0));
+ 
+-	tpnt = _dl_load_shared_library((flag & RTLD_NOLOAD) ? DL_RESOLVE_NOLOAD : 0,
++	tpnt = _dl_load_shared_library(flag & (RTLD_NOLOAD | RTLD_GLOBAL | RTLD_NODELETE),
+ 					&rpnt, tfrom, (char*)libname, 0);
+ 	if (tpnt == NULL) {
+ 		_dl_unmap_cache();
+@@ -394,7 +392,6 @@ static void *do_dlopen(const char *libname, int flag, ElfW(Addr) from)
+ 	dyn_chain = (struct dyn_elf *) malloc(sizeof(struct dyn_elf));
+ 	memset(dyn_chain, 0, sizeof(struct dyn_elf));
+ 	dyn_chain->dyn = tpnt;
+-	tpnt->rtld_flags |= (flag & (RTLD_GLOBAL|RTLD_NODELETE));
+ 
+ 	dyn_chain->next_handle = _dl_handles;
+ 	_dl_handles = dyn_ptr = dyn_chain;
+@@ -435,12 +432,11 @@ static void *do_dlopen(const char *libname, int flag, ElfW(Addr) from)
+ 						dpnt->d_un.d_val);
+ 				_dl_if_debug_print("Trying to load '%s', needed by '%s'\n",
+ 						lpntstr, runp->tpnt->libname);
+-				tpnt1 = _dl_load_shared_library(0, &rpnt, runp->tpnt, lpntstr, 0);
++				tpnt1 = _dl_load_shared_library(flag & (RTLD_GLOBAL | RTLD_NODELETE),
++								&rpnt, runp->tpnt, lpntstr, 0);
+ 				if (!tpnt1)
+ 					goto oops;
+ 
+-				tpnt1->rtld_flags |= (flag & (RTLD_GLOBAL|RTLD_NODELETE));
+-
+ 				/* This list is for dlsym() and relocation */
+ 				dyn_ptr->next = (struct dyn_elf *) malloc(sizeof(struct dyn_elf));
+ 				memset (dyn_ptr->next, 0, sizeof (struct dyn_elf));
+-- 
