@@ -33,11 +33,11 @@ diff --git a/test/Test.mak b/test/Test.mak
 --- a/test/Test.mak
 +++ b/test/Test.mak
 @@ -127,7 +127,8 @@ $(G_TARGETS): $(U_TARGET_SRCS) $(MAKE_SRCS)
- 	$(Q)$(HOSTCC) $(filter-out $(HOST_CFLAGS-OMIT-$(patsubst %_glibc,%,$@)),$(HOST_CFLAGS)) \
  	$(CFLAGS_$(notdir $(CURDIR))) $(CFLAGS_$(patsubst %_glibc,%,$@)) \
  	-c $(patsubst %_glibc,%,$@).c -o $@.o
--	$(Q)$(HOSTCC) $(HOST_LDFLAGS) $@.o -o $@ $(EXTRA_LDFLAGS) $(LDFLAGS_$(patsubst %_glibc,%,$@)) $(LDFLAGS_$@)
-+	$(Q)$(HOSTCC) $(HOST_LDFLAGS) $@.o -o $@ $(EXTRA_LDFLAGS) \
+ 	$(Q)$(HOSTCC) $(filter-out $(LDFLAGS-OMIT-$(patsubst %_glibc,%,$@)),$(HOST_LDFLAGS)) \
+-	$@.o -o $@ $(EXTRA_LDFLAGS) $(LDFLAGS_$(patsubst %_glibc,%,$@)) $(LDFLAGS_$@)
++	$@.o -o $@ $(EXTRA_LDFLAGS) \
 +	$(patsubst %.so,%.so.glibc,$(LDFLAGS_$(patsubst %_glibc,%,$@))) $(LDFLAGS_$@)
  
  
