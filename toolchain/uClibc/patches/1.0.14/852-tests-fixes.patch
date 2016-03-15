@@ -45,7 +45,7 @@ diff --git a/test/regex/tst-regex2.c b/test/regex/tst-regex2.c
  	return exitcode;
  }
  
--#define TIMEOUT 20
+-#define TIMEOUT 100
  #define TEST_FUNCTION do_test()
  #include "../test-skeleton.c"
 diff --git a/test/test-skeleton.c b/test/test-skeleton.c

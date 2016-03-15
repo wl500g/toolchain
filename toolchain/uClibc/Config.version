@@ -2,5 +2,5 @@ config UCLIBC_VERSION
 	string
 	default "snapshot"   if UCLIBC_VERSION_SNAPSHOT
 	default "0.9.33.2"   if UCLIBC_VERSION_0_9_33
-	default "1.0.12"     if UCLIBC_VERSION_1_0_12
+	default "1.0.14"     if UCLIBC_VERSION_1_0_14
 	default "0.9.33.2"
