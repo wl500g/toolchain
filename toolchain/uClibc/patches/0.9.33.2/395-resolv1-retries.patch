@@ -1,0 +1,41 @@
+From: Tim Hockin <thockin@google.com>
+Date: Wed, 9 Mar 2016 21:48:32 +0100
+Subject: DNS: don't count search-path miss as a retry
+
+[ uClibc-ng 2ac83486 ]
+
+Currently a miss on a search-path entry is counted as a retry.  This means that
+users with more than (num_nameservers * retries) entries in their search path
+list fail before trying all search paths.  Concretely, a single nameserver with
+4 search paths will never try the 4th search because the default retry is 3.
+
+The code doesn't currently retry a given nameserver in case of an error, so
+retries is sort of meaningless (though there are some comments indicating it
+might come).  This change only treats total failure of a nameserver (try next
+server) as a retry.
+
+Signed-off-by: Tim Hockin <thockin@google.com>
+---
+ libc/inet/resolv.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libc/inet/resolv.c b/libc/inet/resolv.c
+--- a/libc/inet/resolv.c
++++ b/libc/inet/resolv.c
+@@ -1320,7 +1320,6 @@ int __dns_lookup(const char *name,
+ 				local_ns_num = last_ns_num;
+ 			retries_left = __nameservers * __resolv_attempts;
+ 		}
+-		retries_left--;
+ 		if (local_ns_num >= __nameservers)
+ 			local_ns_num = 0;
+ 		local_id++;
+@@ -1572,6 +1571,7 @@ int __dns_lookup(const char *name,
+ 
+  try_next_server:
+ 		/* Try next nameserver */
++		retries_left--;
+ 		local_ns_num++;
+ 		variant = -1;
+ 	} while (retries_left > 0);
+-- 
