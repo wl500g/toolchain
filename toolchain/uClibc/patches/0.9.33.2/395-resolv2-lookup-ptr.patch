@@ -1,0 +1,37 @@
+From: Tim Hockin <thockin@google.com>
+Date: Wed, 9 Mar 2016 22:12:23 +0100
+Subject: DNS: Don't apply search domains to PTR lookups
+
+[ uClibc-ng 8c85b44f ]
+
+This lessens the load on upstream DNS servers (and it was just nonsensical).
+
+Signed-off-by: Tim Hockin <thockin@google.com>
+---
+ libc/inet/resolv.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/libc/inet/resolv.c b/libc/inet/resolv.c
+--- a/libc/inet/resolv.c
++++ b/libc/inet/resolv.c
+@@ -1264,7 +1264,7 @@ int __dns_lookup(const char *name,
+ 	int variant = -1;  /* search domain to append, -1: none */
+ 	int local_ns_num = -1; /* Nth server to use */
+ 	int local_id = local_id; /* for compiler */
+-	int sdomains;
++	int sdomains = 0;
+ 	bool ends_with_dot;
+ 	sockaddr46_t sa;
+ 
+@@ -1302,7 +1302,9 @@ int __dns_lookup(const char *name,
+ 		 * or do other Really Bad Things. */
+ 		__UCLIBC_MUTEX_LOCK(__resolv_lock);
+ 		__open_nameservers();
+-		sdomains = __searchdomains;
++		if (type != T_PTR) {
++			sdomains = __searchdomains;
++		}
+ 		lookup[name_len] = '\0';
+ 		if ((unsigned)variant < sdomains) {
+ 			/* lookup is name_len + 1 + MAXLEN_searchdomain + 1 long */
+-- 
