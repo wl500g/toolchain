@@ -1,0 +1,30 @@
+From: "Maciej W. Rozycki" <macro@imgtec.com>
+Date: Mon, 4 Jan 2016 23:16:45 +0000
+Subject: MIPS/BFD: Propagate the return status in attribute merging
+
+[ Upstream a33aeff0ae ]
+
+Fix the issue of any failure from `_bfd_elf_merge_object_attributes' not
+being propagated by `mips_elf_merge_obj_attributes'.
+
+	bfd/
+	* elfxx-mips.c (mips_elf_merge_obj_attributes): Propagate the
+	return status from `_bfd_elf_merge_object_attributes'.
+---
+
+diff --git a/bfd/elfxx-mips.c b/bfd/elfxx-mips.c
+--- a/bfd/elfxx-mips.c
++++ b/bfd/elfxx-mips.c
+@@ -15013,9 +15013,7 @@ mips_elf_merge_obj_attributes (bfd *ibfd, bfd *obfd)
+     }
+ 
+   /* Merge Tag_compatibility attributes and any common GNU ones.  */
+-  _bfd_elf_merge_object_attributes (ibfd, obfd);
+-
+-  return TRUE;
++  return _bfd_elf_merge_object_attributes (ibfd, obfd);
+ }
+ 
+ /* Merge backend specific data from an object file to the output
+-- 
+1.9.4
