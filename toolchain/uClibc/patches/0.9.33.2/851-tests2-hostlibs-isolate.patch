@@ -1,5 +1,8 @@
 test: Isolate from host standart libraries if TEST_INSTALLED_UCLIBC not set
 
+In case of we just compile tests with default host gcc(it uses glibc 
+in linker scripts), we must to avoid linking against stdlibs at all.
+
 
 Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
 
@@ -17,15 +20,14 @@ diff --git a/test/Rules.mak b/test/Rules.mak
  
  LDFLAGS        := $(CPU_LDFLAGS-y) -Wl,-z,now
  ifeq ($(DODEBUG),y)
-@@ -89,14 +93,23 @@ ifneq ($(HAVE_SHARED),y)
+@@ -89,14 +93,22 @@ ifneq ($(HAVE_SHARED),y)
  endif
  
  ifndef TEST_INSTALLED_UCLIBC
-+CC_CRT_PATH := $(dir $(shell $(CC) $(CFLAGS) -print-file-name=crtbegin.o))
-+CRT_START_E := $(UCLIBC_PATH)/crt[1i].o $(addprefix $(CC_CRT_PATH),crtbegin.o)
-+CRT_END_E   := $(addprefix $(CC_CRT_PATH),crtend.o) $(UCLIBC_PATH)/crtn.o
-+CRT_START_S := $(UCLIBC_PATH)/crti.o $(addprefix $(CC_CRT_PATH),crtbeginS.o)
-+CRT_END_S   := $(addprefix $(CC_CRT_PATH),crtendS.o) $(UCLIBC_PATH)/crtn.o
++CRT_START_E := $(top_builddir)lib/crt[1i].o $(LIBGCC_DIR)crtbegin.o
++CRT_END_E   := $(LIBGCC_DIR)crtend.o $(top_builddir)lib/crtn.o
++CRT_START_S := $(SHARED_START_FILES)
++CRT_END_S   := $(SHARED_END_FILES)
 +LDFLAGS += -nostdlib -L$(UCLIBC_PATH)
  LDFLAGS += -B$(UCLIBC_PATH) -Wl,-rpath,$(UCLIBC_PATH):$(shell pwd) -Wl,-rpath-link,$(UCLIBC_PATH):$(shell pwd)
 -else
