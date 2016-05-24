@@ -41,7 +41,9 @@ define Build/Prepare
 	$(call Kernel/Prepare/Default)
 	mkdir -p $(LINUX_HEADERS_DIR)
 	yes '' | $(KMAKE) oldconfig
-	$(KMAKE) include/linux/utsrelease.h
+	# Generate utsrelease.h
+	$(KMAKE) prepare1
+	# Install headers
 	$(KMAKE) INSTALL_HDR_PATH="$(LINUX_HEADERS_DIR)" headers_install
 	find $(LINUX_HEADERS_DIR)/include \( -name .install -o -name ..install.cmd \) -delete
 endef
