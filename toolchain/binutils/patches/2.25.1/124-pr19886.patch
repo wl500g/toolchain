@@ -1,0 +1,80 @@
+From: Alan Modra <amodra@gmail.com>
+Date: Fri, 1 Apr 2016 17:08:45 +1030
+Subject: PR19886, --as-needed regression
+
+[ Upstream 7b15fa7ac8 ], fixed for 2.27
+
+This isn't perfect in checking whether libraries will be loaded since
+elf_link_add_object_symbols doesn't recurse down DT_NEEDED links.
+(That happens later in ld/emultempl/elf32.em after_open.)  So in
+effect this recursive check really only looks one level down the
+DT_NEEDED tree.  Which is enough for the most common case, and
+libc.so/ld.so in particular.
+
+	PR 19886
+	* elflink.c (on_needed_list): Recursively check needed status.
+	(elf_link_add_object_symbols): Adjust.
+---
+ bfd/ChangeLog |    6 ++++++
+ bfd/elflink.c |   25 ++++++++++++++++++++-----
+ 2 files changed, 26 insertions(+), 5 deletions(-)
+
+diff --git a/bfd/ChangeLog b/bfd/ChangeLog
+--- a/bfd/ChangeLog
++++ b/bfd/ChangeLog
+@@ -1,3 +1,9 @@
++2016-04-01  Alan Modra  <amodra@gmail.com>
++
++	PR 19886
++	* elflink.c (on_needed_list): Recursively check needed status.
++	(elf_link_add_object_symbols): Adjust.
++
+ 2015-07-21  Tristan Gingold  <gingold@adacore.com>
+ 
+ 	* version.m4: Bump version to 2.25.1
+diff --git a/bfd/elflink.c b/bfd/elflink.c
+--- a/bfd/elflink.c
++++ b/bfd/elflink.c
+@@ -3245,12 +3245,26 @@ elf_add_dt_needed_tag (bfd *abfd,
+   return 0;
+ }
+ 
++/* Return true if SONAME is on the needed list between NEEDED and STOP
++   (or the end of list if STOP is NULL), and needed by a library that
++   will be loaded.  */
++
+ static bfd_boolean
+-on_needed_list (const char *soname, struct bfd_link_needed_list *needed)
+-{
+-  for (; needed != NULL; needed = needed->next)
+-    if ((elf_dyn_lib_class (needed->by) & DYN_AS_NEEDED) == 0
+-	&& strcmp (soname, needed->name) == 0)
++on_needed_list (const char *soname,
++		struct bfd_link_needed_list *needed,
++		struct bfd_link_needed_list *stop)
++{
++  struct bfd_link_needed_list *look;
++  for (look = needed; look != stop; look = look->next)
++    if (strcmp (soname, look->name) == 0
++	&& ((elf_dyn_lib_class (look->by) & DYN_AS_NEEDED) == 0
++	    /* If needed by a library that itself is not directly
++	       needed, recursively check whether that library is
++	       indirectly needed.  Since we add DT_NEEDED entries to
++	       the end of the list, library dependencies appear after
++	       the library.  Therefore search prior to the current
++	       LOOK, preventing possible infinite recursion.  */
++	    || on_needed_list (elf_dt_name (look->by), needed, look)))
+       return TRUE;
+ 
+   return FALSE;
+@@ -4593,7 +4607,8 @@ error_free_dyn:
+ 		       || (old_bfd->flags & BFD_PLUGIN) == 0))
+ 		  || (h->ref_dynamic_nonweak
+ 		      && (elf_dyn_lib_class (abfd) & DYN_AS_NEEDED) != 0
+-		      && !on_needed_list (elf_dt_name (abfd), htab->needed))))
++		      && !on_needed_list (elf_dt_name (abfd),
++					  htab->needed, NULL))))
+ 	    {
+ 	      int ret;
+ 	      const char *soname = elf_dt_name (abfd);
+-- 
