@@ -1,0 +1,420 @@
+From: Maciej W. Rozycki <macro@imgtec.com>
+Date: Tue, 5 Apr 2016 15:10:05 +0100
+Subject: ELF/LD: Avoid producing hidden and internal dynamic symbols
+
+[ Upstream 1f599d0e7b ]
+
+Always turn hidden and internal symbols which have a dynamic index into
+local ones.  This is required by the the ELF gABI[1]:
+
+"A hidden symbol contained in a relocatable object must be either
+removed or converted to STB_LOCAL binding by the link-editor when the
+relocatable object is included in an executable file or shared object."
+
+"An internal symbol contained in a relocatable object must be either
+removed or converted to STB_LOCAL binding by the link-editor when the
+relocatable object is included in an executable file or shared object."
+
+The ELF linker usually respects this requirement, however in the case
+where a dynamic symbol has been preallocated due to a reference of the
+default export class aka visibility from the object being linked, and
+then merged with a hidden or internal symbol definition from within the
+same object, then the original export class is carried over to the
+output dynamic symbol table, because while merging the generic ELF
+linker only converts affected dynamic symbols to local when they are
+defined or referenced by the object being linked and a dynamic object
+involved in the link both at a time.
+
+The dynamic symbol produced confuses then the dynamic loader at the run
+time -- the hidden or internal export class is ignored and the symbol
+follows preemption rules as with the default export class.
+
+In the MIPS target it happens when `mips_elf_record_global_got_symbol'
+creates a dynamic symbol when a call relocation is encountered.
+Additionally if the undefined symbol referred by such a relocation does
+specify the intended export class, then a local dynamic symbol is
+created instead, which is harmless and allowed, but useless.  Normally
+no local dynamic symbols are created, except for a single dummy one at
+the beginning.
+
+Correct the problem by removing the extra check for a dynamic symbol
+being defined or referenced by the object being linked and a dynamic
+object involved in the link both at a time.  The test cases included
+cover the internal and hidden symbol cases, as well as a protected
+symbol for a reference, the handling of which is unchanged by this fix.
+Both cases described above are covered, that is where an internal or
+hidden dynamic symbol is produced and where a local one is.
+
+NB this change affects CRIS results where some symbols in the static
+table produced in a final link are now converted from STV_HIDDEN to
+STB_LOCAL.  This happens whenever the `elf_backend_hide_symbol' handler
+is called, so the affected symbols must have been chosen for entering
+into the dynamic symbol table, except in these test cases no such symbol
+table is produced.  In fully linked binaries the static symbol table is
+only used for debugging though, so such a change is fine.
+
+References:
+
+[1] "System V Application Binary Interface - DRAFT - 24 April 2001",
+    The Santa Cruz Operation, Inc., "Symbol Table",
+    <http://www.sco.com/developers/gabi/2001-04-24/ch4.symtab.html>
+
+	bfd/
+	PR ld/19908
+	* elflink.c (elf_link_add_object_symbols): Always turn hidden
+	and internal symbols which have a dynamic index into local
+	ones.
+
+	ld/
+	PR ld/19908
+	* testsuite/ld-cris/tls-e-20.d: Adjust for hidden symbol
+	handling fix.
+	* testsuite/ld-cris/tls-e-20a.d: Likewise.
+	* testsuite/ld-cris/tls-e-21.d: Likewise.
+	* testsuite/ld-cris/tls-e-23.d: Likewise.
+	* testsuite/ld-cris/tls-e-80.d: Likewise.
+	* testsuite/ld-cris/tls-gd-3h.d: Likewise.
+	* testsuite/ld-cris/tls-leie-19.d: Likewise.
+	* testsuite/ld-mips-elf/export-class-ref-lib.sd: New test.
+	* testsuite/ld-mips-elf/export-hidden-ref.sd: New test.
+	* testsuite/ld-mips-elf/export-internal-ref.sd: New test.
+	* testsuite/ld-mips-elf/export-protected-ref.sd: New test.
+	* testsuite/ld-mips-elf/export-class-ref-f0.s: New test source.
+	* testsuite/ld-mips-elf/export-class-ref-f1.s: New test source.
+	* testsuite/ld-mips-elf/export-class-ref-f2.s: New test source.
+	* testsuite/ld-mips-elf/mips-elf.exp: Run the new tests.
+---
+ bfd/ChangeLog                                    |    6 +++
+ bfd/elflink.c                                    |    2 +-
+ ld/ChangeLog                                     |   20 ++++++++++++
+ ld/testsuite/ld-cris/tls-e-20.d                  |    2 +-
+ ld/testsuite/ld-cris/tls-e-20a.d                 |    2 +-
+ ld/testsuite/ld-cris/tls-e-21.d                  |    2 +-
+ ld/testsuite/ld-cris/tls-e-23.d                  |    2 +-
+ ld/testsuite/ld-cris/tls-e-80.d                  |    2 +-
+ ld/testsuite/ld-cris/tls-gd-3h.d                 |    2 +-
+ ld/testsuite/ld-cris/tls-leie-19.d               |    8 ++--
+ ld/testsuite/ld-mips-elf/export-class-ref-f0.s   |   37 ++++++++++++++++++++++
+ ld/testsuite/ld-mips-elf/export-class-ref-f1.s   |   18 ++++++++++
+ ld/testsuite/ld-mips-elf/export-class-ref-f2.s   |   20 ++++++++++++
+ ld/testsuite/ld-mips-elf/export-class-ref-lib.sd |    6 +++
+ ld/testsuite/ld-mips-elf/export-hidden-ref.sd    |    7 ++++
+ ld/testsuite/ld-mips-elf/export-internal-ref.sd  |    7 ++++
+ ld/testsuite/ld-mips-elf/export-local-ref.sd     |    7 ++++
+ ld/testsuite/ld-mips-elf/export-protected-ref.sd |    6 +++
+ ld/testsuite/ld-mips-elf/mips-elf.exp            |   28 ++++++++++++++++
+ 19 files changed, 173 insertions(+), 11 deletions(-)
+ create mode 100644 ld/testsuite/ld-mips-elf/export-class-ref-f0.s
+ create mode 100644 ld/testsuite/ld-mips-elf/export-class-ref-f1.s
+ create mode 100644 ld/testsuite/ld-mips-elf/export-class-ref-f2.s
+ create mode 100644 ld/testsuite/ld-mips-elf/export-class-ref-lib.sd
+ create mode 100644 ld/testsuite/ld-mips-elf/export-hidden-ref.sd
+ create mode 100644 ld/testsuite/ld-mips-elf/export-internal-ref.sd
+ create mode 100644 ld/testsuite/ld-mips-elf/export-local-ref.sd
+ create mode 100644 ld/testsuite/ld-mips-elf/export-protected-ref.sd
+
+diff --git a/bfd/ChangeLog b/bfd/ChangeLog
+--- a/bfd/ChangeLog
++++ b/bfd/ChangeLog
+@@ -1,3 +1,9 @@
++2016-04-05  Maciej W. Rozycki  <macro@imgtec.com>
++
++	* elflink.c (elf_link_add_object_symbols): Always turn hidden
++	and internal symbols which have a dynamic index into local
++	ones.
++
+ 2016-04-01  Alan Modra  <amodra@gmail.com>
+ 
+ 	PR 19886
+diff --git a/bfd/elflink.c b/bfd/elflink.c
+--- a/bfd/elflink.c
++++ b/bfd/elflink.c
+@@ -4583,7 +4583,7 @@ error_free_dyn:
+ 		    goto error_free_vers;
+ 		}
+ 	    }
+-	  else if (dynsym && h->dynindx != -1)
++	  else if (h->dynindx != -1)
+ 	    /* If the symbol already has a dynamic index, but
+ 	       visibility says it should not be visible, turn it into
+ 	       a local symbol.  */
+diff --git a/ld/testsuite/ld-cris/tls-e-20.d b/ld/testsuite/ld-cris/tls-e-20.d
+--- a/ld/testsuite/ld-cris/tls-e-20.d
++++ b/ld/testsuite/ld-cris/tls-e-20.d
+@@ -35,8 +35,8 @@ SYMBOL TABLE:
+ 0+80094 l    d  \.text	0+ \.text
+ 0+820b0 l    d  \.tdata	0+ \.tdata
+ 0+820bc l    d  \.got	0+ \.got
++0+ l       \.tdata	0+4 x
+ 0+820bc l     O \.got	0+ _GLOBAL_OFFSET_TABLE_
+-0+ g       \.tdata	0+4 \.hidden x
+ 0+80098 g     F \.text	0+6 tlsdsofn2
+ 0+8 g       \.tdata	0+4 \.hidden x2
+ 0+80094 g       \.text	0+ _start
+diff --git a/ld/testsuite/ld-cris/tls-e-20a.d b/ld/testsuite/ld-cris/tls-e-20a.d
+--- a/ld/testsuite/ld-cris/tls-e-20a.d
++++ b/ld/testsuite/ld-cris/tls-e-20a.d
+@@ -43,8 +43,8 @@ SYMBOL TABLE:
+ 0+ l    df \*ABS\*	0+ .*
+ 0+ l       \.tdata	0+80 tls128
+ 0+ l    df \*ABS\*	0+ .*
++0+80 l       \.tdata	0+4 x
+ 0+82168 l     O \.got	0+ _GLOBAL_OFFSET_TABLE_
+-0+80 g       \.tdata	0+4 \.hidden x
+ 0+800c4 g     F \.text	0+6 tlsdsofn2
+ 0+821b4 g     O \.data	0+4 got7var5
+ 0+88 g       \.tdata	0+4 \.hidden x2
+diff --git a/ld/testsuite/ld-cris/tls-e-21.d b/ld/testsuite/ld-cris/tls-e-21.d
+--- a/ld/testsuite/ld-cris/tls-e-21.d
++++ b/ld/testsuite/ld-cris/tls-e-21.d
+@@ -19,7 +19,7 @@ private flags = 0:
+ #...
+ SYMBOL TABLE:
+ #...
+-0+80 g       \.tdata	0+4 \.hidden x
++0+80 l       \.tdata	0+4 x
+ #...
+ Contents of section \.text:
+ #...
+diff --git a/ld/testsuite/ld-cris/tls-e-23.d b/ld/testsuite/ld-cris/tls-e-23.d
+--- a/ld/testsuite/ld-cris/tls-e-23.d
++++ b/ld/testsuite/ld-cris/tls-e-23.d
+@@ -19,7 +19,7 @@ private flags = 0:
+ #...
+ SYMBOL TABLE:
+ #...
+-0+80 g       \.tdata	0+4 \.hidden x
++0+80 l       \.tdata	0+4 x
+ #...
+ Contents of section \.text:
+ #...
+diff --git a/ld/testsuite/ld-cris/tls-e-80.d b/ld/testsuite/ld-cris/tls-e-80.d
+--- a/ld/testsuite/ld-cris/tls-e-80.d
++++ b/ld/testsuite/ld-cris/tls-e-80.d
+@@ -42,8 +42,8 @@ SYMBOL TABLE:
+ 0+820c0 l    d  \.tdata	0+ \.tdata
+ 0+820d0 l    d  \.tbss	0+ \.tbss
+ 0+820d0 l    d  \.got	0+ \.got
++0+ l       \.tdata	0+4 x
+ 0+820d0 l     O \.got	0+ _GLOBAL_OFFSET_TABLE_
+-0+ g       \.tdata	0+4 \.hidden x
+ 0+800a0 g     F \.text	0+6 tlsdsofn2
+ 0+800a8 g     F \.text	0+6 tlsfn12
+ 0+c g       \.tdata	0+4 \.hidden x2
+diff --git a/ld/testsuite/ld-cris/tls-gd-3h.d b/ld/testsuite/ld-cris/tls-gd-3h.d
+--- a/ld/testsuite/ld-cris/tls-gd-3h.d
++++ b/ld/testsuite/ld-cris/tls-gd-3h.d
+@@ -19,7 +19,7 @@ private flags = 0:
+ #...
+ SYMBOL TABLE:
+ #...
+-0+80 g       \.tdata	0+4 \.hidden x
++0+80 l       \.tdata	0+4 x
+ #...
+ Contents of section \.text:
+ #...
+diff --git a/ld/testsuite/ld-cris/tls-leie-19.d b/ld/testsuite/ld-cris/tls-leie-19.d
+--- a/ld/testsuite/ld-cris/tls-leie-19.d
++++ b/ld/testsuite/ld-cris/tls-leie-19.d
+@@ -26,13 +26,13 @@ private flags = 0:
+                   CONTENTS.*
+ SYMBOL TABLE:
+ #...
+-0+88 g       .tdata	0+4 x
++0+84 l       \.tdata	0+4 x2
+ #...
+-0+84 g       \.tdata	0+4 \.hidden x2
++0+80 l       \.tdata	0+4 x1
+ #...
+-0+8c g       .tdata	0+4 z
++0+88 g       .tdata	0+4 x
+ #...
+-0+80 g       \.tdata	0+4 \.hidden x1
++0+8c g       .tdata	0+4 z
+ #...
+ Contents of section \.text:
+ #...
+diff --git a/ld/testsuite/ld-mips-elf/export-class-ref-f0.s b/ld/testsuite/ld-mips-elf/export-class-ref-f0.s
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-mips-elf/export-class-ref-f0.s
+@@ -0,0 +1,37 @@
++	.abicalls
++	.text
++
++	.if	refv == 3
++	.protected f1
++	.elseif	refv == 2
++	.hidden	f1
++	.elseif	refv == 1
++	.internal f1
++	.endif
++
++	.globl	f0
++	.ent	f0
++f0:
++	.frame	$sp, 32, $31
++	.mask	0x80000000, -4
++	.fmask	0x00000000, 0
++	.set	noreorder
++	.cpload	$25
++	.set	reorder
++	addiu	$sp, $sp, -32
++	sw	$31, 28($sp)
++	.cprestore 16
++
++	lw	$25, %call16(f1)($28)
++	jalr	$25
++	lw	$28, 16($sp)
++
++	lw	$25, %call16(f2)($28)
++	jalr	$25
++	lw	$28, 16($sp)
++
++	move	$2, $0
++	lw	$31, 28($sp)
++	addiu	$sp, $sp, 32
++	jr	$31
++	.end	f0
+diff --git a/ld/testsuite/ld-mips-elf/export-class-ref-f1.s b/ld/testsuite/ld-mips-elf/export-class-ref-f1.s
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-mips-elf/export-class-ref-f1.s
+@@ -0,0 +1,18 @@
++	.abicalls
++	.text
++
++	.globl	f1
++	.if	defv == 3
++	.protected f1
++	.elseif	defv == 2
++	.hidden	f1
++	.elseif	defv == 1
++	.internal f1
++	.endif
++	.ent	f1
++f1:
++	.frame	$sp, 0, $31
++	.mask	0x00000000, 0
++	.fmask	0x00000000, 0
++	jr	$31
++	.end	f1
+diff --git a/ld/testsuite/ld-mips-elf/export-class-ref-f2.s b/ld/testsuite/ld-mips-elf/export-class-ref-f2.s
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-mips-elf/export-class-ref-f2.s
+@@ -0,0 +1,20 @@
++	.abicalls
++	.text
++
++	.globl	f1
++	.ent	f1
++f1:
++	.frame	$sp, 0, $31
++	.mask	0x00000000, 0
++	.fmask	0x00000000, 0
++	jr	$31
++	.end	f1
++
++	.globl	f2
++	.ent	f2
++f2:
++	.frame	$sp, 0, $31
++	.mask	0x00000000, 0
++	.fmask	0x00000000, 0
++	jr	$31
++	.end	f2
+diff --git a/ld/testsuite/ld-mips-elf/export-class-ref-lib.sd b/ld/testsuite/ld-mips-elf/export-class-ref-lib.sd
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-mips-elf/export-class-ref-lib.sd
+@@ -0,0 +1,6 @@
++# Make sure `f1' is present in the dynamic symbol table, e.g.:
++#    Num:    Value  Size Type    Bind   Vis      Ndx Name
++#      6: 000002d0     8 FUNC    GLOBAL DEFAULT    7 f1
++#...
++ *[0-9]+: +[0-9a-f]+ +[0-9]+ FUNC +GLOBAL +DEFAULT +[0-9]+ f1
++#pass
+diff --git a/ld/testsuite/ld-mips-elf/export-hidden-ref.sd b/ld/testsuite/ld-mips-elf/export-hidden-ref.sd
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-mips-elf/export-hidden-ref.sd
+@@ -0,0 +1,7 @@
++# Make sure no hidden symbol is present in the dynamic symbol table, e.g.:
++#    Num:    Value  Size Type    Bind   Vis      Ndx Name
++#      6: 004003f0     8 FUNC    GLOBAL HIDDEN     8 f1
++#failif
++#...
++.+ +HIDDEN +.+ +f1
++#pass
+diff --git a/ld/testsuite/ld-mips-elf/export-internal-ref.sd b/ld/testsuite/ld-mips-elf/export-internal-ref.sd
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-mips-elf/export-internal-ref.sd
+@@ -0,0 +1,7 @@
++# Make sure no internal symbol is present in the dynamic symbol table, e.g.:
++#    Num:    Value  Size Type    Bind   Vis      Ndx Name
++#      6: 004003f0     8 FUNC    GLOBAL INTERNAL   8 f1
++#failif
++#...
++.+ +INTERNAL +.+ +f1
++#pass
+diff --git a/ld/testsuite/ld-mips-elf/export-local-ref.sd b/ld/testsuite/ld-mips-elf/export-local-ref.sd
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-mips-elf/export-local-ref.sd
+@@ -0,0 +1,7 @@
++# Make sure no local symbol is present in the dynamic symbol table, e.g.:
++#    Num:    Value  Size Type    Bind   Vis      Ndx Name
++#      6: 004003f0     8 FUNC    LOCAL  DEFAULT    8 f1
++#failif
++#...
++.+ +LOCAL +.+ +f1
++#pass
+diff --git a/ld/testsuite/ld-mips-elf/export-protected-ref.sd b/ld/testsuite/ld-mips-elf/export-protected-ref.sd
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-mips-elf/export-protected-ref.sd
+@@ -0,0 +1,6 @@
++# Make sure a protected symbol is present in the dynamic symbol table, e.g.:
++#    Num:    Value  Size Type    Bind   Vis      Ndx Name
++#      6: 004003f0     8 FUNC    GLOBAL PROTECTED    8 f1
++#...
++ *[0-9]+: +[0-9a-f]+ +[0-9]+ FUNC +GLOBAL +PROTECTED +[0-9]+ f1
++#pass
+diff --git a/ld/testsuite/ld-mips-elf/mips-elf.exp b/ld/testsuite/ld-mips-elf/mips-elf.exp
+--- a/ld/testsuite/ld-mips-elf/mips-elf.exp
++++ b/ld/testsuite/ld-mips-elf/mips-elf.exp
+@@ -899,3 +899,31 @@ if { $linux_gnu } {
+ 	    n32 -1 1 umips
+     }
+ }
++
++# PR ld/19908 export class tests.
++if { $linux_gnu } {
++    run_ld_link_tests [list \
++	[list "Shared library for MIPS export class symbol reference tests" \
++	      "$abi_ldflags(o32) -shared" "" \
++	      "$abi_asflags(o32)" \
++	      { export-class-ref-f2.s } \
++	      { { readelf --dyn-syms export-class-ref-lib.sd } } \
++	      "export-class-ref-lib.so"]]
++    foreach { class flag } { internal 1 hidden 2 protected 3 } {
++	run_ld_link_tests [list \
++	    [list "MIPS $class symbol reference test 1" \
++		  "$abi_ldflags(o32) -e f0" "tmpdir/export-class-ref-lib.so" \
++		  "$abi_asflags(o32) --defsym defv=$flag" \
++		  { export-class-ref-f0.s export-class-ref-f1.s } \
++		  [list [list readelf --dyn-syms export-$class-ref.sd] \
++			[list readelf --dyn-syms export-local-ref.sd]] \
++		  "export-$class-ref"] \
++	    [list "MIPS $class symbol reference test 2" \
++		  "$abi_ldflags(o32) -e f0" "tmpdir/export-class-ref-lib.so" \
++		  "$abi_asflags(o32) --defsym defv=$flag --defsym refv=$flag" \
++		  { export-class-ref-f0.s export-class-ref-f1.s } \
++		  [list [list readelf --dyn-syms export-$class-ref.sd] \
++			[list readelf --dyn-syms export-local-ref.sd]] \
++		  "export-$class-ref"]]
++    }
++}
+-- 
