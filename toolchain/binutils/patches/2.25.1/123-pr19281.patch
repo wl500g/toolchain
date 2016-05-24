@@ -1,0 +1,23 @@
+From: Richard Earnshaw <Richard.Earnshaw@arm.com>
+Date: Thu, 20 Nov 2014 17:02:47 +0000
+Subject: config/tc-arm.c (rotate_left): Avoid undefined behaviour when N = 0.
+
+[ Upstream d840c081f8 ], fixed for 2.26
+
+PR gas/19281 - Can't cross-compile glibc-2.22 for ARM 
+
+---
+
+diff --git a/gas/config/tc-arm.c b/gas/config/tc-arm.c
+--- a/gas/config/tc-arm.c
++++ b/gas/config/tc-arm.c
+@@ -7251,7 +7251,7 @@ parse_operands (char *str, const unsigned int *pattern, bfd_boolean thumb)
+ 
+ /* Functions for operand encoding.  ARM, then Thumb.  */
+ 
+-#define rotate_left(v, n) (v << n | v >> (32 - n))
++#define rotate_left(v, n) (v << (n & 31) | v >> ((32 - n) & 31))
+ 
+ /* If VAL can be encoded in the immediate field of an ARM instruction,
+    return the encoded form.  Otherwise, return FAIL.  */
+-- 
