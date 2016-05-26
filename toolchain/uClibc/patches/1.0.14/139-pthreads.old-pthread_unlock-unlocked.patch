@@ -1,25 +1,44 @@
-linuxthreads.old: Fix segfault when pthread_mutex_unlock() called against unlocked NORMAL mutex.
+[v3] linuxthreads.old: Fix segfault when pthread_mutex_unlock() called against unlocked NORMAL mutex.
 
 Althought, it is undefined behavior, there is no reason for segfault.
-See http://pubs.opengroup.org/onlinepubs/9699919799/functions/pthread_mutex_lock.html
+
+ Program received signal SIGSEGV, Segmentation fault.
+ __pthread_unlock (lock=lock@entry=0x804b03c <lock+16>)
+    at libpthread/linuxthreads.old/spinlock.c:231
+ 231                 (&lock->__status, oldstatus, (long)(thr->p_nextlock) & ~1L))
+
+It occurs only on platforms which has HAS_COMPARE_AND_SWAP defined.
+
+Restore glibc commit fbaf6e72d6 "spinlock.c (__pthread_unlock): Don't crash if
+called for an untaken mutex." behavior, broken later by commit 4ad1d0cfbf.
 
 
 Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
 ---
 
-diff --git a/libpthread/linuxthreads.old/mutex.c b/libpthread/linuxthreads.old/mutex.c
---- a/libpthread/linuxthreads.old/mutex.c
-+++ b/libpthread/linuxthreads.old/mutex.c
-@@ -171,7 +171,8 @@ int attribute_hidden __pthread_mutex_unlock(pthread_mutex_t * mutex)
- {
-   switch (mutex->__m_kind) {
-   case PTHREAD_MUTEX_ADAPTIVE_NP:
--    __pthread_unlock(&mutex->__m_lock);
-+    if (mutex->__m_lock.__status != 0)
-+      __pthread_unlock(&mutex->__m_lock);
-     return 0;
-   case PTHREAD_MUTEX_RECURSIVE_NP:
-     if (mutex->__m_owner != thread_self())
+diff --git a/libpthread/linuxthreads.old/spinlock.c b/libpthread/linuxthreads.old/spinlock.c
+--- a/libpthread/linuxthreads.old/spinlock.c
++++ b/libpthread/linuxthreads.old/spinlock.c
+@@ -188,10 +188,16 @@ int __pthread_unlock(struct _pthread_fastlock * lock)
+   WRITE_MEMORY_BARRIER();
+ 
+ again:
+-  while ((oldstatus = lock->__status) == 1) {
+-    if (__compare_and_swap_with_release_semantics(&lock->__status,
++  oldstatus = lock->__status;
++  if (oldstatus == 0 || oldstatus == 1) {
++    /* No threads are waiting for this lock.  Please note that we also
++       enter this case if the lock is not taken at all.  If this wouldn't
++       be done here we would crash further down.  */
++    if (! __compare_and_swap_with_release_semantics(&lock->__status,
+ 	oldstatus, 0))
+-      return 0;
++      goto again;
++
++    return 0;
+   }
+ 
+   /* Find thread in waiting queue with maximal priority */
 diff -uNBp /dev/null b/test/pthread/ex8-mtx-odd.c
 --- /dev/null
 +++ b/test/pthread/ex8-mtx-odd.c	2010-09-30 11:04:24.000000000 +0400
