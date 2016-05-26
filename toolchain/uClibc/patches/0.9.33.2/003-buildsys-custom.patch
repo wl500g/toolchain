@@ -1,5 +1,7 @@
 1) Avoid unnececary rebuilds due to compiler flag changes
 
+2) Fix broken link.asneeded function
+
 
 Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
 
@@ -16,6 +18,15 @@ diff --git a/Rules.mak b/Rules.mak
  # Some nice CPU specific optimizations
  ifeq ($(TARGET_ARCH),i386)
  $(eval $(call check-gcc-var,-fomit-frame-pointer))
+@@ -535,7 +535,7 @@ ifdef LD_FLAG_NO_ASNEEDED
+ export CC_FLAG_NO_ASNEEDED:=-Wl,$(LD_FLAG_NO_ASNEEDED)
+ endif
+ endif
+-link.asneeded = $(if $(findstring yy,$(CC_FLAG_ASNEEDED)$(CC_FLAG_NO_ASNEEDED)),$(CC_FLAG_ASNEEDED) $(1) $(CC_FLAG_NO_ASNEEDED))
++link.asneeded = $(if $(CC_FLAG_ASNEEDED),$(if $(CC_FLAG_NO_ASNEEDED),$(CC_FLAG_ASNEEDED) $(1) $(CC_FLAG_NO_ASNEEDED)))
+ 
+ # Check for AS_NEEDED support in linker script (binutils>=2.16.1 has it)
+ ifndef ASNEEDED
 @@ -648,9 +651,6 @@
  #$(eval $(call check-ld-var,--gc-sections))
  #LDFLAGS_NOSTRIP += $(LDFLAG_--gc-sections)
@@ -26,3 +37,4 @@ diff --git a/Rules.mak b/Rules.mak
  ifeq ($(UCLIBC_BUILD_RELRO),y)
  LDFLAGS_NOSTRIP+=-Wl,-z,relro
  endif
+-- 
