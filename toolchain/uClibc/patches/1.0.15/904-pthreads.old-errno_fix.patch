@@ -9,8 +9,8 @@ Ref.:
 
  OpenWRT patch
 
---- a/libpthread/linuxthreads.old/errno.c
-+++ b/libpthread/linuxthreads.old/errno.c
+--- a/libpthread/linuxthreads/errno.c
++++ b/libpthread/linuxthreads/errno.c
 @@ -22,6 +22,7 @@
  #include "internals.h"
  #include <stdio.h>

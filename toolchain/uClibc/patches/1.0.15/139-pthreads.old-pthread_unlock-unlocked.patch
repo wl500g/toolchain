@@ -4,7 +4,7 @@ Althought, it is undefined behavior, there is no reason for segfault.
 
  Program received signal SIGSEGV, Segmentation fault.
  __pthread_unlock (lock=lock@entry=0x804b03c <lock+16>)
-    at libpthread/linuxthreads.old/spinlock.c:231
+    at libpthread/linuxthreads/spinlock.c:231
  231                 (&lock->__status, oldstatus, (long)(thr->p_nextlock) & ~1L))
 
 It occurs only on platforms which has HAS_COMPARE_AND_SWAP defined.
@@ -16,9 +16,9 @@ called for an untaken mutex." behavior, broken later by commit 4ad1d0cfbf.
 Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
 ---
 
-diff --git a/libpthread/linuxthreads.old/spinlock.c b/libpthread/linuxthreads.old/spinlock.c
---- a/libpthread/linuxthreads.old/spinlock.c
-+++ b/libpthread/linuxthreads.old/spinlock.c
+diff --git a/libpthread/linuxthreads/spinlock.c b/libpthread/linuxthreads/spinlock.c
+--- a/libpthread/linuxthreads/spinlock.c
++++ b/libpthread/linuxthreads/spinlock.c
 @@ -188,10 +188,16 @@ int __pthread_unlock(struct _pthread_fastlock * lock)
    WRITE_MEMORY_BARRIER();
  
