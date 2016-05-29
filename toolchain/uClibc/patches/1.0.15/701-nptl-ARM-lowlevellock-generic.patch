@@ -1,0 +1,202 @@
+ARM: nptl: Use generic lowlevellock.c, patch from glibc
+
+lowlevellock.c for arm differs from the generic lowlevellock.c only in
+insignificant ways, so can be removed. Follow glibc commit 6d96f5e4c0
+
+Solves __lll_timedlock_wait busy-wait issues described at
+ http://sourceware.org/bugzilla/show_bug.cgi?id=15119
+
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+---
+ .../nptl/sysdeps/unix/sysv/linux/arm/Makefile.arch |   5 +-
+ .../unix/sysv/linux/arm/libc-lowlevellock.c        |  20 ---
+ .../sysdeps/unix/sysv/linux/arm/lowlevellock.c     | 136 ---------------------
+ 3 files changed, 2 insertions(+), 159 deletions(-)
+ delete mode 100644 libpthread/nptl/sysdeps/unix/sysv/linux/arm/libc-lowlevellock.c
+ delete mode 100644 libpthread/nptl/sysdeps/unix/sysv/linux/arm/lowlevellock.c
+
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/arm/Makefile.arch b/libpthread/nptl/sysdeps/unix/sysv/linux/arm/Makefile.arch
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/arm/Makefile.arch
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/arm/Makefile.arch
+@@ -7,10 +7,9 @@
+ 
+ libpthread_linux_arch_SSRC =
+ libpthread_linux_arch_CSRC = pthread_once.c \
+-	pt-__syscall_rt_sigaction.c pt-__syscall_error.c \
+-	lowlevellock.c
++	pt-__syscall_rt_sigaction.c pt-__syscall_error.c
+ 
+-libc_linux_arch_CSRC = fork.c libc-lowlevellock.c
++libc_linux_arch_CSRC = fork.c
+ libc_linux_arch_SSRC = clone.S vfork.S
+ libc_linux_arch_SSRC-OMIT = waitpid.S
+ 
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/arm/libc-lowlevellock.c b/libpthread/nptl/sysdeps/unix/sysv/linux/arm/libc-lowlevellock.c
+deleted file mode 100644
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/arm/libc-lowlevellock.c
++++ /dev/null
+@@ -1,20 +0,0 @@
+-/* Copyright (C) 2003 Free Software Foundation, Inc.
+-   This file is part of the GNU C Library.
+-   Contributed by Paul Mackerras <paulus@au.ibm.com>, 2003.
+-
+-   The GNU C Library is free software; you can redistribute it and/or
+-   modify it under the terms of the GNU Lesser General Public
+-   License as published by the Free Software Foundation; either
+-   version 2.1 of the License, or (at your option) any later version.
+-
+-   The GNU C Library is distributed in the hope that it will be useful,
+-   but WITHOUT ANY WARRANTY; without even the implied warranty of
+-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the GNU
+-   Lesser General Public License for more details.
+-
+-   You should have received a copy of the GNU Lesser General Public
+-   License along with the GNU C Library; if not, see
+-   <http://www.gnu.org/licenses/>.  */
+-
+-/* No difference to lowlevellock.c, except we lose a couple of functions.  */
+-#include "lowlevellock.c"
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/arm/lowlevellock.c b/libpthread/nptl/sysdeps/unix/sysv/linux/arm/lowlevellock.c
+deleted file mode 100644
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/arm/lowlevellock.c
++++ /dev/null
+@@ -1,136 +0,0 @@
+-/* low level locking for pthread library.  Generic futex-using version.
+-   Copyright (C) 2003, 2005, 2007 Free Software Foundation, Inc.
+-   This file is part of the GNU C Library.
+-
+-   The GNU C Library is free software; you can redistribute it and/or
+-   modify it under the terms of the GNU Lesser General Public
+-   License as published by the Free Software Foundation; either
+-   version 2.1 of the License, or (at your option) any later version.
+-
+-   The GNU C Library is distributed in the hope that it will be useful,
+-   but WITHOUT ANY WARRANTY; without even the implied warranty of
+-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the GNU
+-   Lesser General Public License for more details.
+-
+-   You should have received a copy of the GNU Lesser General Public
+-   License along with the GNU C Library; if not, see
+-   <http://www.gnu.org/licenses/>.  */
+-
+-#include <errno.h>
+-#include <sysdep.h>
+-#include <lowlevellock.h>
+-#include <sys/time.h>
+-#include <tls.h>
+-
+-void
+-#ifndef IS_IN_libpthread
+-weak_function
+-#endif
+-__lll_lock_wait_private (int *futex)
+-{
+-  do
+-    {
+-      int oldval = atomic_compare_and_exchange_val_acq (futex, 2, 1);
+-      if (oldval != 0)
+-	lll_futex_wait (futex, 2, LLL_PRIVATE);
+-    }
+-  while (atomic_compare_and_exchange_bool_acq (futex, 2, 0) != 0);
+-}
+-
+-
+-/* These functions don't get included in libc.so  */
+-#ifdef IS_IN_libpthread
+-void
+-__lll_lock_wait (int *futex, int private)
+-{
+-  do
+-    {
+-      int oldval = atomic_compare_and_exchange_val_acq (futex, 2, 1);
+-      if (oldval != 0)
+-	lll_futex_wait (futex, 2, private);
+-    }
+-  while (atomic_compare_and_exchange_bool_acq (futex, 2, 0) != 0);
+-}
+-
+-
+-int
+-__lll_timedlock_wait (int *futex, const struct timespec *abstime, int private)
+-{
+-  struct timespec rt;
+-
+-  /* Reject invalid timeouts.  */
+-  if (abstime->tv_nsec < 0 || abstime->tv_nsec >= 1000000000)
+-    return EINVAL;
+-
+-  /* Upgrade the lock.  */
+-  if (atomic_exchange_acq (futex, 2) == 0)
+-    return 0;
+-
+-  do
+-    {
+-      struct timeval tv;
+-
+-      /* Get the current time.  */
+-      (void) gettimeofday (&tv, NULL);
+-
+-      /* Compute relative timeout.  */
+-      rt.tv_sec = abstime->tv_sec - tv.tv_sec;
+-      rt.tv_nsec = abstime->tv_nsec - tv.tv_usec * 1000;
+-      if (rt.tv_nsec < 0)
+-	{
+-	  rt.tv_nsec += 1000000000;
+-	  --rt.tv_sec;
+-	}
+-
+-      /* Already timed out?  */
+-      if (rt.tv_sec < 0)
+-	return ETIMEDOUT;
+-
+-      // XYZ: Lost the lock to check whether it was private.
+-      lll_futex_timed_wait (futex, 2, &rt, private);
+-    }
+-  while (atomic_compare_and_exchange_bool_acq (futex, 2, 0) != 0);
+-
+-  return 0;
+-}
+-
+-
+-int
+-__lll_timedwait_tid (int *tidp, const struct timespec *abstime)
+-{
+-  int tid;
+-
+-  if (abstime->tv_nsec < 0 || abstime->tv_nsec >= 1000000000)
+-    return EINVAL;
+-
+-  /* Repeat until thread terminated.  */
+-  while ((tid = *tidp) != 0)
+-    {
+-      struct timeval tv;
+-      struct timespec rt;
+-
+-      /* Get the current time.  */
+-      (void) gettimeofday (&tv, NULL);
+-
+-      /* Compute relative timeout.  */
+-      rt.tv_sec = abstime->tv_sec - tv.tv_sec;
+-      rt.tv_nsec = abstime->tv_nsec - tv.tv_usec * 1000;
+-      if (rt.tv_nsec < 0)
+-	{
+-	  rt.tv_nsec += 1000000000;
+-	  --rt.tv_sec;
+-	}
+-
+-      /* Already timed out?  */
+-      if (rt.tv_sec < 0)
+-	return ETIMEDOUT;
+-
+-      /* Wait until thread terminates.  */
+-      // XYZ: Lost the lock to check whether it was private.
+-      if (lll_futex_timed_wait (tidp, tid, &rt, LLL_SHARED) == -ETIMEDOUT)
+-	return ETIMEDOUT;
+-    }
+-
+-  return 0;
+-}
+-#endif
+-- 
