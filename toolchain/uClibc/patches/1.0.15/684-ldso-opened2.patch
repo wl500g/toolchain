@@ -1,0 +1,94 @@
+ldso: Consistently set & use DL_OPENED flag in both ld.so and libdl
+
+Previously, DL_OPENED flag was set in libdl only and never used.
+Set it centralized in _dl_load_elf_shared_library() & use it in
+both ld.so and libdl.
+Additionally, rename it to DL_OPENED2 for clarity.
+
+
+Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
+
+diff --git a/ldso/include/dl-hash.h b/ldso/include/dl-hash.h
+--- a/ldso/include/dl-hash.h
++++ b/ldso/include/dl-hash.h
+@@ -153,7 +153,7 @@ struct elf_resolve {
+ #define JMP_RELOCS_DONE	    0x000002
+ #define INIT_FUNCS_CALLED   0x000004
+ #define FINI_FUNCS_CALLED   0x000008
+-#define DL_OPENED	    0x000010
++#define DL_OPENED2	    0x000010
+ #define DL_RESERVED	    0x000020
+ 
+ extern struct dyn_elf     * _dl_symbol_tables;
+diff --git a/ldso/ldso/dl-elf.c b/ldso/ldso/dl-elf.c
+--- a/ldso/ldso/dl-elf.c
++++ b/ldso/ldso/dl-elf.c
+@@ -526,6 +526,7 @@ struct elf_resolve *_dl_load_elf_shared_library(unsigned int rflags,
+ 		if (tpnt->st_dev == st.st_dev && tpnt->st_ino == st.st_ino) {
+ 			/* Already loaded */
+ 			tpnt->usage_count++;
++			tpnt->init_flag |= DL_OPENED2;
+ 			_dl_close(infile);
+ 			return tpnt;
+ 		}
+diff --git a/ldso/ldso/ldso.c b/ldso/ldso/ldso.c
+--- a/ldso/ldso/ldso.c
++++ b/ldso/ldso/ldso.c
+@@ -908,7 +908,7 @@ of this helper program; chances are you did not intend to run this program.\n\
+ 
+ #ifdef __LDSO_LDD_SUPPORT__
+ 					if (trace_loaded_objects && !_dl_trace_prelink &&
+-					    tpnt1->usage_count == 1) {
++					    !(tpnt1->init_flag & DL_OPENED2)) {
+ 						/* This is a real hack to make
+ 						 * ldd not print the library
+ 						 * itself when run on a
+@@ -1000,7 +1000,7 @@ of this helper program; chances are you did not intend to run this program.\n\
+ 
+ # ifdef __LDSO_LDD_SUPPORT__
+ 				if (trace_loaded_objects && !_dl_trace_prelink &&
+-				    tpnt1->usage_count == 1) {
++				    !(tpnt1->init_flag & DL_OPENED2)) {
+ 					_dl_dprintf(1, "\t%s => %s (%x)\n",
+ 						    cp2, tpnt1->libname,
+ 						    DL_LOADADDR_BASE(tpnt1->loadaddr));
+@@ -1037,6 +1037,8 @@ of this helper program; chances are you did not intend to run this program.\n\
+ 							/* Insert the ld.so only once */
+ 							ldso_tpnt = add_ldso(tpnt, load_addr,
+ 												 ldso_mapaddr, auxvt, rpnt);
++						} else {
++							ldso_tpnt->init_flag |= DL_OPENED2;
+ 						}
+ 						ldso_tpnt->usage_count++;
+ 						tpnt1 = ldso_tpnt;
+@@ -1067,7 +1069,7 @@ of this helper program; chances are you did not intend to run this program.\n\
+ 
+ #ifdef __LDSO_LDD_SUPPORT__
+ 				if (trace_loaded_objects && !_dl_trace_prelink &&
+-				    tpnt1->usage_count == 1) {
++				    !(tpnt1->init_flag & DL_OPENED2)) {
+ 					_dl_dprintf(1, "\t%s => %s (%x)\n",
+ 						    lpntstr, tpnt1->libname,
+ 						    DL_LOADADDR_BASE(tpnt1->loadaddr));
+diff --git a/ldso/libdl/libdl.c b/ldso/libdl/libdl.c
+--- a/ldso/libdl/libdl.c
++++ b/ldso/libdl/libdl.c
+@@ -396,7 +396,7 @@ static void *do_dlopen(const char *libname, int flag, ElfW(Addr) from)
+ 	dyn_chain->next_handle = _dl_handles;
+ 	_dl_handles = dyn_ptr = dyn_chain;
+ 
+-	if (tpnt->usage_count > 1) {
++	if (tpnt->init_flag & DL_OPENED2) {
+ 		_dl_if_debug_print("Lib: %s already opened\n", libname);
+ 		/* see if there is a handle from a earlier dlopen */
+ 		for (handle = _dl_handles->next_handle; handle; handle = handle->next_handle) {
+@@ -412,8 +412,6 @@ static void *do_dlopen(const char *libname, int flag, ElfW(Addr) from)
+ 		return dyn_chain;
+ 	}
+ 
+-	tpnt->init_flag |= DL_OPENED;
+-
+ 	_dl_if_debug_print("Looking for needed libraries\n");
+ 	nlist = 0;
+ 	runp = alloca(sizeof(*runp));
+-- 
