@@ -1,0 +1,27 @@
+From: Jan Vangorp <jan.vangorp_ext@softathome.com>
+Date: Thu, 9 Jun 2016 00:00:49 +0200
+Subject: Fix return value of fwrite when a 'hard' error occurs
+
+[ uClibc-ng commit 96f28216 ]
+
+When a 'hard' error occurs, fwrite reports that all data was written or
+buffered even if that is not the case. It should report how much data
+was actually written and buffered.
+
+Signed-off-by: Jan Vangorp <jan.vangorp_ext@softathome.com>
+---
+ libc/stdio/_WRITE.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libc/stdio/_WRITE.c b/libc/stdio/_WRITE.c
+--- a/libc/stdio/_WRITE.c
++++ b/libc/stdio/_WRITE.c
+@@ -76,6 +76,7 @@ size_t attribute_hidden __stdio_WRITE(register FILE *stream,
+ 			 */
+ 			if (errno != EINTR && errno != EAGAIN) {
+ 				/* do we have other "soft" errors? */
++				bufsize -= todo;
+ 				break;
+ 			}
+ #ifdef __STDIO_BUFFERS
+-- 
