@@ -1,0 +1,74 @@
+From: Jan Vangorp <jan.vangorp_ext@softathome.com>
+Date: Thu, 9 Jun 2016 00:00:18 +0200
+Subject: Fix infinite loop when fopencookie custom write returns 0 on error
+
+[ uClibc-ng commit 568ceebf ]
+
+The man page for fopencookie prescribes that custom write functions
+should return 0 on error (and should definitely not return a negative
+value) [1].
+
+However, the uClibc implementation expects a negative return value in
+case of an error (libc/stdio/_WRITE.c). If the write function returns 0
+on error, we drop into an infinite loop if the error persists.
+
+This patch wraps the user supplied write function such that a 0 return
+value is converted to -1. errno is first set to EAGAIN such that if the
+custom write function does not set errno in case of error, this is
+treated as a "soft" error.
+
+Custom write functions that cater towards uClibc and _do_ return a
+negative value are not affected.
+
+If no custom write function is supplied, set errno to EINVAL such that
+this condition is treated as a "hard" error. Previously the behaviour
+depended on whether the last error before the write happened to be a "hard"
+or a "soft" error.
+
+[1] http://git.kernel.org/cgit/docs/man-pages/man-pages.git/tree/man3/fopencookie.3?id=6c0d0ef0c7a9c4bcf805c6f9e9bc1ef1c3865ea0#n164
+
+Signed-off-by: Jan Vangorp <jan.vangorp_ext@softathome.com>
+---
+ libc/stdio/_stdio.h | 15 ++++++++++++++-
+ 1 file changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/libc/stdio/_stdio.h b/libc/stdio/_stdio.h
+--- a/libc/stdio/_stdio.h
++++ b/libc/stdio/_stdio.h
+@@ -110,6 +110,18 @@ do { \
+ 		cfile->__gcs.NAME(cfile->__cookie, ##ARGS); \
+  }
+ 
++#define __STDIO_STREAM_CUSTOM_WRITE_FUNC(S, ARGS...) \
++ if (__STDIO_STREAM_IS_CUSTOM((S))) { \
++	_IO_cookie_file_t *cfile = (_IO_cookie_file_t *) (S); \
++	if (cfile->__gcs.write == NULL) { \
++		__set_errno(EINVAL); \
++		return -1; \
++	} \
++	__set_errno(EAGAIN); \
++	ssize_t w = cfile->__gcs.write(cfile->__cookie, ##ARGS); \
++	return (w == 0 ? -1 : w); \
++ }
++
+ typedef struct {
+   struct __STDIO_FILE_STRUCT __fp;
+   void *__cookie;
+@@ -121,6 +133,7 @@ typedef struct {
+ #undef __STDIO_STREAM_GLIBC_CUSTOM_FILEDES
+ #define __STDIO_STREAM_IS_CUSTOM(S)	(0)
+ #define __STDIO_STREAM_CUSTOM_IO_FUNC(S, NAME, RC, ARGS...)
++#define __STDIO_STREAM_CUSTOM_WRITE_FUNC(S, ARGS...)
+ 
+ #endif /* __UCLIBC_HAS_GLIBC_CUSTOM_STREAMS__ */
+ 
+@@ -135,7 +148,7 @@ static inline ssize_t __READ(FILE *stream, char *buf, size_t bufsize)
+ 
+ static inline ssize_t __WRITE(FILE *stream, const char *buf, size_t bufsize)
+ {
+-	__STDIO_STREAM_CUSTOM_IO_FUNC(stream, write, -1, buf, bufsize);
++	__STDIO_STREAM_CUSTOM_WRITE_FUNC(stream, buf, bufsize);
+ 
+ 	return write(stream->__filedes, buf, bufsize);
+ }
+-- 
