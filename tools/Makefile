@@ -10,8 +10,8 @@ curdir:=tools
 
 # subdirectories to descend into
 tools-y := pkg-config
-tools-$(CONFIG_GCC_VERSION_4_4)$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8) += gmp mpfr
-tools-$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8) += mpc libelf
+tools-$(CONFIG_GCC_VERSION_4_4)$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8)$(CONFIG_GCC_VERSION_5) += gmp mpfr
+tools-$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8)$(CONFIG_GCC_VERSION_5) += mpc libelf
 tools-$(CONFIG_CCACHE) += ccache
 $(curdir)/builddirs := $(tools-y)
 $(curdir)/builddirs-compile := $($(curdir)/builddirs)

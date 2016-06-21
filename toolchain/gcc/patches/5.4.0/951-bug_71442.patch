@@ -1,0 +1,67 @@
+[5/6/7] r232569 breaks -Wunused-*
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=71442
+
+--- gcc-5-branch/gcc/cp/ChangeLog	2016/06/08 18:00:30	237233
++++ gcc-5-branch/gcc/cp/ChangeLog	2016/06/08 18:05:38	237234
+@@ -1,3 +1,8 @@
++2016-06-08  Jakub Jelinek  <jakub@redhat.com>
++
++	PR c++/71442
++	* pt.c (tsubst_copy): Only set TREE_USED on DECLs.
++
+ 2016-06-03  Release Manager
+ 
+ 	* GCC 5.4.0 released.
+--- gcc-5-branch/gcc/cp/pt.c	2016/06/08 18:00:30	237233
++++ gcc-5-branch/gcc/cp/pt.c	2016/06/08 18:05:38	237234
+@@ -13287,7 +13287,8 @@
+ 	      len = TREE_VEC_LENGTH (expanded);
+ 	      /* Set TREE_USED for the benefit of -Wunused.  */
+ 	      for (int i = 0; i < len; i++)
+-		TREE_USED (TREE_VEC_ELT (expanded, i)) = true;
++		if (DECL_P (TREE_VEC_ELT (expanded, i)))
++		  TREE_USED (TREE_VEC_ELT (expanded, i)) = true;
+ 	    }
+ 
+ 	  if (expanded == error_mark_node)
+--- /dev/null
++++ gcc-5-branch/gcc/testsuite/g++.dg/cpp0x/Wunused-variable-1.C	2016/06/08 18:05:38	237234
+@@ -0,0 +1,37 @@
++// PR c++/71442
++// { dg-do compile { target c++11 } }
++// { dg-options "-Wunused-variable" }
++
++struct C
++{
++  template<typename... Ts>
++  int operator()(Ts &&...)
++  {
++    return sizeof...(Ts);
++  }
++};
++
++int
++foo ()
++{
++  C {} (1, 1L, 1LL, 1.0);
++}
++
++template<int N>
++void
++bar ()
++{
++  char a;		// { dg-warning "unused variable" }
++  short b;		// { dg-warning "unused variable" }
++  int c;		// { dg-warning "unused variable" }
++  long d;		// { dg-warning "unused variable" }
++  long long e;		// { dg-warning "unused variable" }
++  float f;		// { dg-warning "unused variable" }
++  double g;		// { dg-warning "unused variable" }
++}
++
++void
++baz ()
++{
++  bar <0> ();
++}

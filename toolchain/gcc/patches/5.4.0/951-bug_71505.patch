@@ -1,0 +1,27 @@
+-O3 internal compiler error in vect_analyze_data_ref_accesses, at tree-vect-data-refs.c:2596
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=71505
+
+--- gcc-5-branch/gcc/ChangeLog	2016/06/13 10:25:26	237372
++++ gcc-5-branch/gcc/ChangeLog	2016/06/13 10:29:35	237373
+@@ -1,3 +1,9 @@
++2016-06-13  Richard Biener  <rguenther@suse.de>
++
++	PR tree-optimization/71505
++	* tree-vect-data-refs.c (vect_analyze_data_ref_accesses): Make
++	assert match comment.
++
+ 2016-06-03  Release Manager
+ 
+ 	* GCC 5.4.0 released.
+--- gcc-5-branch/gcc/tree-vect-data-refs.c	2016/06/13 10:25:26	237372
++++ gcc-5-branch/gcc/tree-vect-data-refs.c	2016/06/13 10:29:35	237373
+@@ -2593,7 +2593,7 @@
+ 	  /* Sorting has ensured that DR_INIT (dra) <= DR_INIT (drb).  */
+ 	  HOST_WIDE_INT init_a = TREE_INT_CST_LOW (DR_INIT (dra));
+ 	  HOST_WIDE_INT init_b = TREE_INT_CST_LOW (DR_INIT (drb));
+-	  gcc_assert (init_a < init_b);
++	  gcc_assert (init_a <= init_b);
+ 
+ 	  /* If init_b == init_a + the size of the type * k, we have an
+ 	     interleaving, and DRA is accessed before DRB.  */

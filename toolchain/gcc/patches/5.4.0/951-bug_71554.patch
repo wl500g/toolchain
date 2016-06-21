@@ -1,0 +1,45 @@
+Miscompilation of __builtin_mul_overflow on i686
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=71554
+
+--- gcc-5-branch/gcc/ChangeLog	2016/06/16 10:37:37	237519
++++ gcc-5-branch/gcc/ChangeLog	2016/06/16 10:38:21	237520
+@@ -1,3 +1,16 @@
++2016-06-16  Jakub Jelinek  <jakub@redhat.com>
++
++	PR target/71554
++	* config/i386/i386.md (setcc + movzbl peephole2): Use reg_set_p.
++	(setcc + and peephole2): Likewise.
++
++	Backported from mainline
++	2015-04-29  Uros Bizjak  <ubizjak@gmail.com>
++
++	* config/i386/i386.md (setcc+movzbl peephole2): Check also clobbered
++	reg.
++	(setcc+andl peephole2): Ditto.
++
+ 2016-06-13  Richard Biener  <rguenther@suse.de>
+ 
+ 	PR tree-optimization/71505
+--- gcc-5-branch/gcc/config/i386/i386.md	2016/06/16 10:37:37	237519
++++ gcc-5-branch/gcc/config/i386/i386.md	2016/06/16 10:38:21	237520
+@@ -11645,7 +11645,8 @@
+ 	(zero_extend (match_dup 1)))]
+   "(peep2_reg_dead_p (3, operands[1])
+     || operands_match_p (operands[1], operands[3]))
+-   && ! reg_overlap_mentioned_p (operands[3], operands[0])"
++   && ! reg_overlap_mentioned_p (operands[3], operands[0])
++   && ! reg_set_p (operands[3], operands[4])"
+   [(parallel [(set (match_dup 5) (match_dup 0))
+ 	      (match_dup 4)])
+    (set (strict_low_part (match_dup 6))
+@@ -11688,7 +11689,8 @@
+ 	      (clobber (reg:CC FLAGS_REG))])]
+   "(peep2_reg_dead_p (3, operands[1])
+     || operands_match_p (operands[1], operands[3]))
+-   && ! reg_overlap_mentioned_p (operands[3], operands[0])"
++   && ! reg_overlap_mentioned_p (operands[3], operands[0])
++   && ! reg_set_p (operands[3], operands[4])"
+   [(parallel [(set (match_dup 5) (match_dup 0))
+ 	      (match_dup 4)])
+    (set (strict_low_part (match_dup 6))

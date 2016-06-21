@@ -1,0 +1,19 @@
+MIPS: Disable XLP due to memory hog in `xlp_fpu' automaton
+
+ genautomata tries to alloc >512Mb RAM for `xlp_fpu' automaton.
+
+ TODO: Need to fix xlp.md for permanent solution.
+
+
+diff --git a/gcc/config/mips/mips.md b/gcc/config/mips/mips.md
+--- a/gcc/config/mips/mips.md
++++ b/gcc/config/mips/mips.md
+@@ -1105,7 +1105,7 @@
+ (include "sb1.md")
+ (include "sr71k.md")
+ (include "xlr.md")
+-(include "xlp.md")
++;;(include "xlp.md")
+ (include "generic.md")
+ 
+ ;;

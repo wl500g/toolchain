@@ -12,6 +12,9 @@ choice
 	config GCC_VERSION_4_8_5
 		bool "gcc 4.8.5"
 
+	config GCC_VERSION_5_4
+		bool "gcc 5.4"
+
 endchoice
 
 config EABI_SUPPORT

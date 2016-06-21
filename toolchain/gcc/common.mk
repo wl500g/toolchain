@@ -29,6 +29,9 @@ endif
 ifeq ($(PKG_VERSION),4.8.5)
   PKG_MD5SUM:=80d2c2982a3392bb0b89673ff136e223
 endif
+ifeq ($(PKG_VERSION),5.4.0)
+  PKG_MD5SUM:=4c626ac2a83ef30dfb9260e6f59c2b30
+endif
 
 PATCH_DIR=../patches/$(PKG_VERSION)
 PKG_SOURCE_URL:=ftp://ftp.fu-berlin.de/unix/languages/gcc/releases/gcc-$(PKG_VERSION) \
@@ -74,11 +77,12 @@ GCC_CONFIGURE:= \
 		--disable-multilib \
 		--disable-nls \
 		--disable-__cxa_atexit \
+		--with-host-libstdcxx=-lstdc++ \
 		$(SOFT_FLOAT_CONFIG_OPTION) \
 		$(if $(CONFIG_arm),--with-arch=armv7-a --with-abi=aapcs-linux) \
 		$(call qstrip,$(CONFIG_EXTRA_GCC_CONFIG_OPTIONS)) \
 
-ifneq ($(CONFIG_GCC_VERSION_4_4)$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8),)
+ifneq ($(CONFIG_GCC_VERSION_4_4)$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8)$(CONFIG_GCC_VERSION_5),)
   GCC_BUILD_TARGET_LIBGCC:=y
   GCC_CONFIGURE+= \
 		--with-gmp=$(TOPDIR)/staging_dir/host \
@@ -86,15 +90,20 @@ ifneq ($(CONFIG_GCC_VERSION_4_4)$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_
 		--disable-decimal-float
 endif
 
-ifneq ($(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8),)
+ifneq ($(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8)$(CONFIG_GCC_VERSION_5),)
   GCC_CONFIGURE+= \
 		--with-mpc=$(TOPDIR)/staging_dir/host 
 endif
 
-ifneq ($(CONFIG_GCC_VERSION_4_4)$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8),)
+ifneq ($(CONFIG_GCC_VERSION_4_4)$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8)$(CONFIG_GCC_VERSION_5),)
   ifneq ($(CONFIG_mips)$(CONFIG_mipsel),)
     GCC_CONFIGURE += --with-mips-plt
   endif
+endif
+
+ifneq ($(CONFIG_GCC_VERSION_5),)
+  GCC_CONFIGURE += --with-diagnostics-color=auto-if-env
+  GCC_CONFIGURE += --with-default-libstdcxx-abi=gcc4-compatible --disable-libstdcxx-dual-abi --disable-libstdcxx-verbose
 endif
 
 ifneq ($(CONFIG_SSP_SUPPORT),)
