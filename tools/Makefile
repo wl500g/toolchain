@@ -13,6 +13,7 @@ tools-y := pkg-config
 tools-$(CONFIG_GCC_VERSION_4_4)$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8)$(CONFIG_GCC_VERSION_5) += gmp mpfr
 tools-$(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8)$(CONFIG_GCC_VERSION_5) += mpc libelf
 tools-$(CONFIG_CCACHE) += ccache
+tools-$(CONFIG_GCC_USE_GRAPHITE) += isl
 $(curdir)/builddirs := $(tools-y)
 $(curdir)/builddirs-compile := $($(curdir)/builddirs)
 $(curdir)/builddirs-install := $($(curdir)/builddirs-compile)
@@ -20,6 +21,7 @@ $(curdir)/builddirs-install := $($(curdir)/builddirs-compile)
 # builddir dependencies
 $(curdir)/mpfr/compile := $(curdir)/gmp/install
 $(curdir)/mpc/compile := $(curdir)/mpfr/install $(curdir)/gmp/install
+$(curdir)/isl/compile := $(curdir)/gmp/install
 
 # preparatory work
 $(STAGING_DIR)/.prepared:

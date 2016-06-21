@@ -63,6 +63,12 @@ export CONFIG_SITE=NONE
 export libgcc_cv_fixed_point=no
 export glibcxx_cv_c99_math_tr1=no
 
+ifeq ($(CONFIG_GCC_USE_GRAPHITE)$(CONFIG_GCC_VERSION_5),yy)
+  GRAPHITE_CONFIGURE=--with-isl=$(REAL_STAGING_DIR_HOST)
+else
+  GRAPHITE_CONFIGURE=--without-isl --without-cloog
+endif
+
 GCC_CONFIGURE:= \
 	SHELL="$(BASH)" \
 	$(PKG_SOURCE_DIR)/configure \
@@ -77,6 +83,7 @@ GCC_CONFIGURE:= \
 		--disable-multilib \
 		--disable-nls \
 		--disable-__cxa_atexit \
+		$(GRAPHITE_CONFIGURE) \
 		--with-host-libstdcxx=-lstdc++ \
 		$(SOFT_FLOAT_CONFIG_OPTION) \
 		$(if $(CONFIG_arm),--with-arch=armv7-a --with-abi=aapcs-linux) \
