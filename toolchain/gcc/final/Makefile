@@ -13,14 +13,6 @@ ifneq ($(CONFIG_GCC_VERSION_4_6)$(CONFIG_GCC_VERSION_4_8),)
 	--with-libelf=$(TOPDIR)/staging_dir/host
 endif
 
-ifneq ($(CONFIG_TLS_SUPPORT),)
-  GCC_CONFIGURE += \
-	--enable-tls
-else
-  GCC_CONFIGURE += \
-	--disable-tls
-endif
-
 ifneq ($(CONFIG_INSTALL_LIBSTDCPP),)
   GCC_CONFIGURE += \
 	--enable-libstdcxx-time=yes

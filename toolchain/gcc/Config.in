@@ -36,13 +36,6 @@ config SSP_SUPPORT
 	help
 	    Enable Stack-Smashing Protection support
 
-config TLS_SUPPORT
-	bool
-	prompt "Enable Thread-local storage (TLS) support"
-	default n
-	help
-	    Enable Thread-local storage support
-
 config INSTALL_LIBSTDCPP
 	bool
 	prompt "Build/install c++ compiler and libstdc++?"
