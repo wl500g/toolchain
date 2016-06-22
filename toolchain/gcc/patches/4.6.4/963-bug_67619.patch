@@ -1,0 +1,76 @@
+ICE at -O1 and above on x86_64-linux-gnu in int_mode_for_mode, at stor-layout.c:425
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=67619
+
+git-svn-id: svn+ssh://gcc.gnu.org/svn/gcc/branches/gcc-4_9-branch@227984 138bc75d-0d04-0410-961f-82ee72b054a4
+
+diff --git a/gcc/ChangeLog b/gcc/ChangeLog
+--- a/gcc/ChangeLog
++++ b/gcc/ChangeLog
+@@ -1,3 +1,9 @@
++2015-09-21  Uros Bizjak  <ubizjak@gmail.com>
++
++	PR middle-end/67619
++	* except.c (expand_builtin_eh_return): Use copy_addr_to_reg to copy
++	the address to a register.
++
+ 2014-08-19  Patrick Palka  <ppalka@gcc.gnu.org>
+ 
+ 	PR c/45584
+diff --git a/gcc/except.c b/gcc/except.c
+--- a/gcc/except.c
++++ b/gcc/except.c
+@@ -2223,7 +2223,7 @@ expand_builtin_eh_return (tree stackadj_tree ATTRIBUTE_UNUSED,
+ 		     VOIDmode, EXPAND_NORMAL);
+   tmp = convert_memory_address (Pmode, tmp);
+   if (!crtl->eh.ehr_stackadj)
+-    crtl->eh.ehr_stackadj = copy_to_reg (tmp);
++    crtl->eh.ehr_stackadj = copy_addr_to_reg (tmp);
+   else if (tmp != crtl->eh.ehr_stackadj)
+     emit_move_insn (crtl->eh.ehr_stackadj, tmp);
+ #endif
+@@ -2232,7 +2232,7 @@ expand_builtin_eh_return (tree stackadj_tree ATTRIBUTE_UNUSED,
+ 		     VOIDmode, EXPAND_NORMAL);
+   tmp = convert_memory_address (Pmode, tmp);
+   if (!crtl->eh.ehr_handler)
+-    crtl->eh.ehr_handler = copy_to_reg (tmp);
++    crtl->eh.ehr_handler = copy_addr_to_reg (tmp);
+   else if (tmp != crtl->eh.ehr_handler)
+     emit_move_insn (crtl->eh.ehr_handler, tmp);
+ 
+diff --git a/gcc/testsuite/gcc.dg/torture/pr67619.c b/gcc/testsuite/gcc.dg/torture/pr67619.c
+new file mode 100644
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr67619.c
+@@ -0,0 +1,13 @@
++/* { dg-do compile } */
++/* { dg-require-effective-target builtin_eh_return } */
++
++void
++foo ()
++{
++  unsigned long l;
++  void *p = 0; 
++
++  __builtin_unwind_init ();
++  l = 0; 
++  __builtin_eh_return (l, p);
++}
+diff --git a/gcc/testsuite/lib/target-supports.exp b/gcc/testsuite/lib/target-supports.exp
+--- a/gcc/testsuite/lib/target-supports.exp
++++ b/gcc/testsuite/lib/target-supports.exp
+@@ -3952,3 +3952,13 @@ proc force_conventional_output_for { test } {
+ 	void foo(void) { z = (c *) y; }
+     } "-Wcast-align"]
+ }
++
++# Return 1 if target supports __builtin_eh_return
++proc check_effective_target_builtin_eh_return { } {
++    return [check_no_compiler_messages builtin_eh_return object {
++	void test (long l, void *p)
++	{
++	    __builtin_eh_return (l, p);
++	}
++    } "" ]
++}
+-- 
