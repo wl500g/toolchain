@@ -1,0 +1,189 @@
+[5/6] Member function pointer template flagged with 'is not a function template'
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=69098
+
+--- trunk/gcc/cp/ChangeLog	2016/02/12 00:54:55	233364
++++ trunk/gcc/cp/ChangeLog	2016/02/12 01:11:52	233365
+@@ -1,6 +1,18 @@
+ 	PR c++/68890
+ 	* constexpr.c (verify_ctor_sanity): Remove CONSTRUCTOR_NELTS check.
+ 
++2016-02-12  Patrick Palka  <ppalka@gcc.gnu.org>
++
++	Backport from mainline
++	PR c++/69098
++	* pt.c (lookup_and_finish_template_variable): New function,
++	extracted from ...
++	(tsubst_copy_and_build) [TEMPLATE_ID_EXPR]: ... here.  Use it.
++	(tsubst_qualified_id): Consider that EXPR might be a variable
++	template.
++	* typeck.c (check_template_keyword): Don't emit an error
++	if DECL is a variable template.
++
+ 2016-02-10  Jason Merrill  <jason@redhat.com>
+ 
+ 	PR c++/68926
+--- trunk/gcc/cp/pt.c	2016/02/12 00:54:55	233364
++++ trunk/gcc/cp/pt.c	2016/02/12 01:11:52	233365
+@@ -8696,6 +8696,24 @@ finish_template_variable (tree var, tsub
+ 
+   return instantiate_template (templ, arglist, complain);
+ }
++
++/* Construct a TEMPLATE_ID_EXPR for the given variable template TEMPL having
++   TARGS template args, and instantiate it if it's not dependent.  */
++
++static tree
++lookup_and_finish_template_variable (tree templ, tree targs,
++				     tsubst_flags_t complain)
++{
++  templ = lookup_template_variable (templ, targs);
++  if (!any_dependent_template_arguments_p (targs))
++    {
++      templ = finish_template_variable (templ, complain);
++      mark_used (templ);
++    }
++
++  return convert_from_reference (templ);
++}
++
+ 
+ struct pair_fn_data
+ {
+@@ -13732,7 +13750,13 @@ tsubst_qualified_id (tree qualified_id, 
+     }
+ 
+   if (is_template)
+-    expr = lookup_template_function (expr, template_args);
++    {
++      if (variable_template_p (expr))
++	expr = lookup_and_finish_template_variable (expr, template_args,
++						    complain);
++      else
++	expr = lookup_template_function (expr, template_args);
++    }
+ 
+   if (expr == error_mark_node && complain & tf_error)
+     qualified_name_lookup_error (scope, TREE_OPERAND (qualified_id, 1),
+@@ -15912,15 +15936,7 @@ tsubst_copy_and_build (tree t,
+ 	  return error_mark_node;
+ 
+ 	if (variable_template_p (templ))
+-	  {
+-	    templ = lookup_template_variable (templ, targs);
+-	    if (!any_dependent_template_arguments_p (targs))
+-	      {
+-		templ = finish_template_variable (templ, complain);
+-		mark_used (templ);
+-	      }
+-	    RETURN (convert_from_reference (templ));
+-	  }
++	  RETURN (lookup_and_finish_template_variable (templ, targs, complain));
+ 
+ 	if (TREE_CODE (templ) == COMPONENT_REF)
+ 	  {
+--- trunk/gcc/cp/typeck.c	2016/02/12 00:54:55	233364
++++ trunk/gcc/cp/typeck.c	2016/02/12 01:11:52	233365
+@@ -2601,7 +2601,15 @@  check_template_keyword (tree decl)
+   if (TREE_CODE (decl) != TEMPLATE_DECL
+       && TREE_CODE (decl) != TEMPLATE_ID_EXPR)
+     {
+-      if (!is_overloaded_fn (decl))
++      if (VAR_P (decl))
++	{
++	  if (DECL_USE_TEMPLATE (decl)
++	      && PRIMARY_TEMPLATE_P (DECL_TI_TEMPLATE (decl)))
++	    ;
++	  else
++	    permerror (input_location, "%qD is not a template", decl);
++	}
++      else if (!is_overloaded_fn (decl))
+ 	permerror (input_location, "%qD is not a template", decl);
+       else
+ 	{
+--- /dev/null
++++ trunk/gcc/testsuite/g++.dg/cpp1y/69098-2.C	2016/02/12 01:11:52	233365
+@@ -0,0 +1,37 @@
++// PR c++/69098
++// { dg-do compile { target c++14 } }
++
++struct A
++{
++  template <int>
++  static void *pf;
++};
++
++template <typename B>
++bool foo1 () {
++  return A::pf<false>;
++}
++
++template <typename B>
++bool foo2 () {
++  return B::template pf<false>;
++}
++
++template <typename B>
++bool foo3 () {
++  return &A::pf<false>;
++}
++
++template <typename B>
++bool foo4 () {
++  return &B::template pf<false>;
++}
++
++
++void bar () {
++  foo1<A>();
++  foo2<A>();
++  foo3<A>();
++  foo4<A>();
++}
++
+--- /dev/null
++++ trunk/gcc/testsuite/g++.dg/cpp1y/69098.C	2016/02/12 01:11:52	233365
+@@ -0,0 +1,43 @@
++// PR c++/69098
++// { dg-do compile { target c++14 } }
++
++template<typename> struct SpecPerType;
++
++class Specializer
++{
++public:
++    template<bool> void MbrFnTempl() //Must be a template
++	{
++	}
++	template<unsigned> struct InnerClassTempl
++	{  //Had to be a template whenever I tested for it
++		static void InnerMemberFn();
++	};
++
++	void Trigger()
++	{
++		InnerClassTempl<0u>::InnerMemberFn();
++	}
++};
++
++template<> struct SpecPerType<Specializer>
++{
++	using FnType = void (Specializer::*)();
++    template<bool P> static constexpr FnType SpecMbrFnPtr =
++        &Specializer::template MbrFnTempl<P>;
++};
++
++template<bool> constexpr SpecPerType<Specializer>::FnType
++    SpecPerType<Specializer>::SpecMbrFnPtr; //Just a formalism
++
++template<unsigned X> void Specializer::InnerClassTempl<X>::InnerMemberFn()
++{
++	using Spec = SpecPerType<Specializer>;
++	typename Spec::FnType ErrorSite = Spec::template SpecMbrFnPtr<true>;
++    //ErrorSite would get called next in the original code
++    //(this should result in a call to MbrFnTempl)
++}
++
++int main()
++{
++}
