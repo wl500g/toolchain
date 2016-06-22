@@ -1,0 +1,45 @@
+bogus warning: right-hand operand of comma expression has no effect on an atomic_int preincrement
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=68907
+
+--- trunk/gcc/c/ChangeLog	2015/12/15 14:56:50	231655
++++ trunk/gcc/c/ChangeLog	2015/12/15 15:13:49	231656
+@@ -1,3 +1,11 @@
++2016-06-22  Marek Polacek  <polacek@redhat.com>
++
++	2015-12-15  Marek Polacek  <polacek@redhat.com>
++	Backport from mainline
++	PR c/68907
++	* c-typeck.c (build_atomic_assign): Set TREE_NO_WARNING on an
++	artificial decl.
++
+ 2016-06-03  Release Manager
+ 
+ 	* GCC 5.4.0 released.
+--- trunk/gcc/c/c-typeck.c	2015/12/15 14:56:50	231655
++++ trunk/gcc/c/c-typeck.c	2015/12/15 15:13:49	231656
+@@ -3814,6 +3814,7 @@ build_atomic_assign (location_t loc, tre
+   newval = create_tmp_var (nonatomic_lhs_type);
+   newval_addr = build_unary_op (loc, ADDR_EXPR, newval, 0);
+   TREE_ADDRESSABLE (newval) = 1;
++  TREE_NO_WARNING (newval) = 1;
+ 
+   loop_decl = create_artificial_label (loc);
+   loop_label = build1 (LABEL_EXPR, void_type_node, loop_decl);
+--- /dev/null
++++ trunk/gcc/testsuite/gcc.dg/pr68907.c	2015/12/15 15:13:49	231656
+@@ -0,0 +1,14 @@
++/* PR c/60195 */
++/* { dg-do compile } */
++/* { dg-options "-std=c11 -Wpedantic -Wall" } */
++
++_Atomic int a;
++
++void
++fn (void)
++{
++  ++a;
++  a++;
++  --a;
++  a--;
++}
