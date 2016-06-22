@@ -1,0 +1,65 @@
+Incorrect location for -Wunused-value warnings in for-loop
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=64637
+
+git-svn-id: svn+ssh://gcc.gnu.org/svn/gcc/trunk@231700 138bc75d-0d04-0410-961f-82ee72b054a4
+
+diff --git a/gcc/c/ChangeLog b/gcc/c/ChangeLog
+--- a/gcc/c/ChangeLog
++++ b/gcc/c/ChangeLog
+@@ -1,6 +1,12 @@
+ 	* c-decl.c (grokdeclarator): If ORIG_QUAL_INDIRECT is indirect, use
+ 	TREE_TYPE of ORIG_QUAL_TYPE, otherwise decrement ORIG_QUAL_INDIRECT.
+ 
++2015-12-16  Marek Polacek  <polacek@redhat.com>
++
++	PR c/64637
++	* c-typeck.c (c_process_expr_stmt): Use location of the expression if
++	available.
++
+ 2015-12-16  Joseph Myers  <joseph@codesourcery.com>
+ 
+ 	PR c/68162
+diff --git a/gcc/c/c-typeck.c b/gcc/c/c-typeck.c
+--- a/gcc/c/c-typeck.c
++++ b/gcc/c/c-typeck.c
+@@ -10131,7 +10131,7 @@ c_process_expr_stmt (location_t loc, tree expr)
+      out which is the result.  */
+   if (!STATEMENT_LIST_STMT_EXPR (cur_stmt_list)
+       && warn_unused_value)
+-    emit_side_effect_warnings (loc, expr);
++    emit_side_effect_warnings (EXPR_LOC_OR_LOC (expr, loc), expr);
+ 
+   exprv = expr;
+   while (TREE_CODE (exprv) == COMPOUND_EXPR)
+diff --git a/gcc/testsuite/gcc.dg/pr64637.c b/gcc/testsuite/gcc.dg/pr64637.c
+new file mode 100644
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr64637.c
+@@ -0,0 +1,25 @@
++/* PR c/64637 */
++/* { dg-do compile } */
++/* { dg-options "-Wunused" } */
++
++void g ();
++
++void
++f (int b)
++{
++  for (int i = 0; i < b; i + b) /* { dg-warning "28:statement with no effect" } */
++    g ();
++  // PARM_DECLs still don't have a location, don't expect an exact location.
++  for (int i = 0; i < b; b) /* { dg-warning "statement with no effect" } */
++    g ();
++  for (int i = 0; i < b; !i) /* { dg-warning "26:statement with no effect" } */
++    g ();
++  for (!b;;) /* { dg-warning "8:statement with no effect" } */
++    g ();
++  for (;; b * 2) /* { dg-warning "13:statement with no effect" } */
++    g ();
++  ({
++     b / 5; /* { dg-warning "8:statement with no effect" } */
++     b ^ 5;
++   });
++}
+-- 
