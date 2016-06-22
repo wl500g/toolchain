@@ -1,0 +1,52 @@
+Some casts wrongly produce a lvalue
+
+ http://gcc.gnu.org/bugzilla/show_bug.cgi?id=66341
+
+--- trunk/gcc/ChangeLog	2015/06/04 05:44:47	224114
++++ trunk/gcc/ChangeLog	2015/06/04 08:17:45	224115
+@@ -1,6 +1,12 @@
+ 	* except.c (expand_builtin_eh_return): Use copy_addr_to_reg to copy
+ 	the address to a register.
+ 
++2015-06-04  Marek Polacek  <polacek@redhat.com>
++
++	PR c/66341
++	* c-typeck.c (build_c_cast): Wrap VALUE into NON_LVALUE_EXPR if
++	it is a lvalue.
++
+ 2014-08-19  Patrick Palka  <ppalka@gcc.gnu.org>
+ 
+ 	PR c/45584
+--- trunk/gcc/c-typeck.c	2015/06/04 05:44:47	224114
++++ trunk/gcc/c-typeck.c	2015/06/04 08:17:45	224115
+@@ -5195,7 +5195,7 @@ build_c_cast (location_t loc, tree type,
+     }
+ 
+   /* Don't let a cast be an lvalue.  */
+-  if (value == expr)
++  if (lvalue_p (value))
+     value = non_lvalue_loc (loc, value);
+ 
+   /* Don't allow the results of casting to floating-point or complex
+--- /dev/null
++++ trunk/gcc/testsuite/gcc.dg/lvalue-8.c
+@@ -0,0 +1,19 @@
++/* PR c/66341 */
++/* { dg-do compile } */
++
++void
++foo (int *p)
++{
++  p = 0;
++  /* A cast does not yield an lvalue.  */
++  (int *) p = 0; /* { dg-error "lvalue required as left operand of assignment" } */
++  /* A cast to a qualified type has the same effect as a cast
++     to the unqualified version of the type.  */
++  (int *const) p = 0; /* { dg-error "lvalue required as left operand of assignment" } */
++  (int *) (char *) p = 0; /* { dg-error "lvalue required as left operand of assignment" } */
++  (int *) (char *) (int *) p = 0; /* { dg-error "lvalue required as left operand of assignment" } */
++  (int *) (char *) (int *) (char *) p = 0; /* { dg-error "lvalue required as left operand of assignment" } */
++  (int *) (double *) p = 0; /* { dg-error "lvalue required as left operand of assignment" } */
++  (int *) (int *) p = 0; /* { dg-error "lvalue required as left operand of assignment" } */
++  (int *) (int *const) p = 0; /* { dg-error "lvalue required as left operand of assignment" } */
++}
