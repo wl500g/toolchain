@@ -21,12 +21,6 @@ HOST_CONFIGURE_ARGS += \
 	--disable-shared \
 	--enable-elf64
 
-define Build/Configure
-	$(call Build/Configure/Default,\
-	    $(HOST_CONFIGURE_ARGS) \
-	)
-endef
-
 define Build/Compile
 	$(MAKE) -C $(PKG_BUILD_DIR)/lib/ libelf.a
 endef

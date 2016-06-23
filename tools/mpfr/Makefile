@@ -20,14 +20,4 @@ HOST_CONFIGURE_ARGS += \
 	--disable-shared \
 	--with-gmp=$(STAGING_DIR_HOST)
 
-define Build/Configure
-	$(call Build/Configure/Default,\
-		$(HOST_CONFIGURE_ARGS) \
-	)
-endef
-
-define Build/Install
-	$(MAKE) -C $(PKG_BUILD_DIR) install
-endef
-
 $(eval $(call HostBuild))

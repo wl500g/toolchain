@@ -24,10 +24,4 @@ HOST_CONFIGURE_ARGS += \
 	--disable-shared \
 	--with-gmp-prefix=$(STAGING_DIR_HOST)
 
-define Build/Configure
-	$(call Build/Configure/Default,\
-		$(HOST_CONFIGURE_ARGS) \
-	)
-endef
-
 $(eval $(call HostBuild))

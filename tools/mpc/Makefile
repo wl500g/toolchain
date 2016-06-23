@@ -23,14 +23,4 @@ HOST_CONFIGURE_ARGS += \
 	--with-mpfr=$(TOPDIR)/staging_dir/host \
 	--with-gmp=$(TOPDIR)/staging_dir/host
 
-define Build/Configure
-	$(call Build/Configure/Default,\
-	    $(HOST_CONFIGURE_ARGS) \
-	)
-endef
-
-define Build/Install
-	$(MAKE) -C $(PKG_BUILD_DIR) install
-endef
-
 $(eval $(call HostBuild))

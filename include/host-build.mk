@@ -1,5 +1,5 @@
-# 
-# Copyright (C) 2006-2008 OpenWrt.org
+#
+# Copyright (C) 2006-2009 OpenWrt.org
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
@@ -34,27 +34,35 @@ define Build/Prepare
   $(call Build/Prepare/Default)
 endef
 
+HOST_CONFIGURE_VARS = \
+	CFLAGS="$(HOST_CFLAGS)" \
+	CPPFLAGS="$(HOST_CPPFLAGS)" \
+	LDFLAGS="$(HOST_LDFLAGS)" \
+	SHELL="$(BASH)"
+
+HOST_CONFIGURE_ARGS = \
+	--target=$(GNU_HOST_NAME) \
+	--host=$(GNU_HOST_NAME) \
+	--build=$(GNU_HOST_NAME) \
+	--program-prefix="" \
+	--program-suffix="" \
+	--prefix=$(STAGING_DIR_HOST) \
+	--exec-prefix=$(STAGING_DIR_HOST) \
+	--sysconfdir=$(STAGING_DIR_HOST)/etc \
+	--localstatedir=$(STAGING_DIR_HOST)/var
+
+HOST_CONFIGURE_CMD = ./configure
+
 define Build/Configure/Default
-	@(cd $(PKG_BUILD_DIR)/$(3); \
-	[ -x configure ] && \
-		$(CP) $(SCRIPT_DIR)/config.{guess,sub} $(PKG_BUILD_DIR)/$(3)/ && \
-		$(2) \
-		CPPFLAGS="$(HOST_CFLAGS)" \
-		LDFLAGS="$(HOST_LDFLAGS)" \
-		SHELL="$(BASH)" \
-		./configure \
-		--target=$(GNU_HOST_NAME) \
-		--host=$(GNU_HOST_NAME) \
-		--build=$(GNU_HOST_NAME) \
-		--program-prefix="" \
-		--program-suffix="" \
-		--prefix=$(STAGING_DIR_HOST) \
-		--exec-prefix=$(STAGING_DIR_HOST) \
-		--sysconfdir=$(STAGING_DIR_HOST)/etc \
-		--localstatedir=$(STAGING_DIR_HOST)/var \
-		$(DISABLE_NLS) \
-		$(1); \
-		true; \
+	(cd $(PKG_BUILD_DIR)/$(3); \
+		if [ -x configure ]; then \
+			$(CP) $(SCRIPT_DIR)/config.{guess,sub} $(PKG_BUILD_DIR)/$(3)/ && \
+			$(2) \
+			$(HOST_CONFIGURE_VARS) \
+			$(HOST_CONFIGURE_CMD) \
+			$(HOST_CONFIGURE_ARGS) \
+			$(1); \
+		fi \
 	)
 endef
 
@@ -69,6 +77,15 @@ endef
 define Build/Compile
   $(call Build/Compile/Default)
 endef
+
+define Build/Install/Default
+	$(MAKE) -C $(PKG_BUILD_DIR) install
+endef
+
+define Build/Install
+  $(call Build/Install/Default)
+endef
+
 
 ifneq ($(CONFIG_AUTOREBUILD),)
   define HostBuild/Autoclean
@@ -89,7 +106,7 @@ endef
 define HostBuild
   $(if $(strip $(PKG_SOURCE_URL)),$(call Download,default))
   $(if $(DUMP),,$(call HostBuild/Autoclean))
-  
+
   $(STAMP_PREPARED):
 	@-rm -rf $(PKG_BUILD_DIR)
 	@mkdir -p $(PKG_BUILD_DIR)
@@ -108,7 +125,7 @@ define HostBuild
 	$(call Build/Install)
 	mkdir -p $$(shell dirname $$@)
 	touch $$@
-	
+
   ifdef Build/Install
     install: $(STAMP_INSTALLED)
   endif

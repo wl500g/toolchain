@@ -28,14 +28,4 @@ HOST_CONFIGURE_ARGS += \
 	--enable-cxx \
 	--enable-mpbsd
 
-define Build/Configure
-	$(call Build/Configure/Default,\
-		$(HOST_CONFIGURE_ARGS) \
-	)
-endef
-
-define Build/Install
-	$(MAKE) -C $(PKG_BUILD_DIR) install
-endef
-
 $(eval $(call HostBuild))
