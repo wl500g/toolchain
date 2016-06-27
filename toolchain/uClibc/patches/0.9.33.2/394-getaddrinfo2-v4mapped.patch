@@ -1,0 +1,96 @@
+From: "Wenzel, Alexander" <alexander.wenzel@qsc.de>
+Date: Tue, 21 Jun 2016 15:49:54 +0000
+Subject: inet/getaddrinfo: fix AF_V4MAPPED behavior for non IPv6 host resolution
+
+[ uClibc-ng 35adc1fa7f ]
+
+When trying to resolve a hostname by getaddrinfo() using some specific
+settings, it will always return -EAI_NONAME (Name or service not known).
+
+To reproduce this behavior, you need to request an IPv6 address with the
+additional AF_V4MAPPED flag set from an non IPv6 capable hostname. If
+you choose a IPv4/IPv6 capable hostname like google.com, everything
+works fine.
+
+This patch is more or less a port [1][2] from the glibc and their behavior
+for the AF_V4MAPPED flag. To test the bug you can use the following snippet.
+
+---- 8< ----
+
+int ret;
+struct addrinfo* result;
+struct addrinfo hints;
+
+memset(&hints, 0, sizeof(struct addrinfo));
+hints.ai_family = AF_INET6;
+hints.ai_flags = AI_V4MAPPED;
+
+ret = getaddrinfo("test.com", NULL, &hints, &result);
+printf("getaddrinfo(): %i", ret);
+
+---- 8< ----
+
+[1] https://sourceware.org/git/?p=glibc.git;a=commit;f=sysdeps/posix/getaddrinfo.c;h=925c3c5c71596c02f7e58a0ffcdcaae44eb065c1
+[2] https://sourceware.org/git/?p=glibc.git;a=commit;f=sysdeps/posix/getaddrinfo.c;h=28977c2c1acb789660ad47e0d88e42486059c916
+
+Signed-off-by: Alexander Wenzel <alexander.wenzel@qsc.de>
+---
+ libc/inet/getaddrinfo.c | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/libc/inet/getaddrinfo.c b/libc/inet/getaddrinfo.c
+index 7ae32be..a9000ae 100644
+--- a/libc/inet/getaddrinfo.c
++++ b/libc/inet/getaddrinfo.c
+@@ -391,6 +391,9 @@ static uint8_t __gai_precedence = 0;	/* =1 - IPv6, IPv4
+ 			memcpy((*pat)->addr, h->h_addr_list[i], sizeof(_type));	\
+ 			pat = &((*pat)->next);					\
+ 		}								\
++		if (_family == AF_INET6 && i > 0) {				\
++			got_ipv6 = true;					\
++		}								\
+ 	}									\
+ }
+ 
+@@ -404,6 +407,7 @@ gaih_inet(const char *name, const struct gaih_service *service,
+ 	struct gaih_servtuple *st;
+ 	struct gaih_addrtuple *at;
+ 	int rc;
++	bool got_ipv6 = false;
+ 	int v4mapped = req->ai_family == PF_INET6 && (req->ai_flags & AI_V4MAPPED);
+ 	unsigned seen = 0;
+ 	if (req->ai_flags & AI_ADDRCONFIG) {
+@@ -586,7 +590,7 @@ gaih_inet(const char *name, const struct gaih_service *service,
+ #endif
+ 			if (req->ai_family == AF_INET
+ 			 || (!v4mapped && req->ai_family == AF_UNSPEC)
+-			 || (v4mapped && (no_inet6_data != 0 || (req->ai_flags & AI_ALL)))
++			 || (v4mapped && (!got_ipv6 || (req->ai_flags & AI_ALL)))
+ 			) {
+ 				if (!(req->ai_flags & AI_ADDRCONFIG) || (seen & SEEN_IPV4))
+ 					gethosts(AF_INET, struct in_addr);
+@@ -705,6 +709,14 @@ gaih_inet(const char *name, const struct gaih_service *service,
+ 			if (at2->family == AF_INET6 || v4mapped) {
+ 				family = AF_INET6;
+ 				socklen = sizeof(struct sockaddr_in6);
++
++				/* If we looked up IPv4 mapped address discard them here if
++				   the caller isn't interested in all address and we have
++				   found at least one IPv6 address.  */
++				if (got_ipv6
++				  && (req->ai_flags & (AI_V4MAPPED|AI_ALL)) == AI_V4MAPPED
++				  && IN6_IS_ADDR_V4MAPPED (at2->addr))
++				goto ignore;
+ 			}
+ #endif
+ #if defined __UCLIBC_HAS_IPV4__ && defined __UCLIBC_HAS_IPV6__
+@@ -781,7 +793,7 @@ gaih_inet(const char *name, const struct gaih_service *service,
+ 				(*pai)->ai_next = NULL;
+ 				pai = &((*pai)->ai_next);
+ 			}
+-
++ignore:
+ 			at2 = at2->next;
+ 		}
+ 	}
+-- 
