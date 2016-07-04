@@ -6,8 +6,6 @@ test: Minor fixes
 
 3) Fix test-skeleton.c faults on empty command line & glibc tests
 
-4) MAKE_SRCS - Take in account only Makefiles that have meaning
-
 
 Signed-off-by: Leonid Lisovskiy <lly.dev@gmail.com>
 
@@ -22,15 +20,6 @@ diff --git a/test/Test.mak b/test/Test.mak
  	fi
  	$(SCAT) "$(binary_name).out"
  endef
-@@ -116,7 +116,7 @@ compile: $(COMPILE_TARGETS)
- G_TARGET_SRCS := $(addsuffix .c,$(G_TARGETS))
- U_TARGET_SRCS := $(addsuffix .c,$(U_TARGETS))
- 
--MAKE_SRCS := Makefile $(TESTDIR)Makefile $(TESTDIR)Rules.mak $(TESTDIR)Test.mak
-+MAKE_SRCS := $(wildcard Makefile.in) $(TESTDIR)Rules.mak $(TESTDIR)Test.mak
- 
- $(U_TARGETS): $(U_TARGET_SRCS) $(MAKE_SRCS)
- 	$(showlink)
 diff --git b/test/regex/Makefile.in b/test/regex/Makefile.in
 --- a/test/regex/Makefile.in
 +++ b/test/regex/Makefile.in
