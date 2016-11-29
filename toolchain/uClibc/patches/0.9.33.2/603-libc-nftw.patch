@@ -1,0 +1,111 @@
+From: John Ata <john.ata@baesystems.com>
+Date: Mon, 17 Oct 2016 14:47:02 -0400
+Subject: Fix nftw when called with FTW_CHDIR and FTW_DEPTH
+
+[ uClibc-ng a6cdfdfff3, 545beca178 ]
+
+Change directory back to the parent before processing
+the directory (after the contents have already been processed).
+
+diff --git a/libc/misc/ftw/ftw.c b/libc/misc/ftw/ftw.c
+--- a/libc/misc/ftw/ftw.c
++++ b/libc/misc/ftw/ftw.c
+@@ -558,19 +558,14 @@ fail:
+   --data->ftw.level;
+   data->ftw.base = previous_base;
+ 
+-  /* Finally, if we process depth-first report the directory.  */
+-  if (result == 0 && (data->flags & FTW_DEPTH))
+-    result = (*data->func) (data->dirbuf, st, FTW_DP, &data->ftw);
+-
+-  if (old_dir
+-      && (data->flags & FTW_CHDIR)
++  if ((data->flags & FTW_CHDIR)
+       && (result == 0
+ 	  || ((data->flags & FTW_ACTIONRETVAL)
+ 	      && (result != -1 && result != FTW_STOP))))
+     {
+       /* Change back to the parent directory.  */
+       int done = 0;
+-      if (old_dir->stream != NULL)
++      if (old_dir && old_dir->stream != NULL)
+ 	if (__fchdir (dirfd (old_dir->stream)) == 0)
+ 	  done = 1;
+ 
+@@ -587,6 +582,10 @@ fail:
+ 	}
+     }
+ 
++  /* Finally, if we process depth-first report the directory.  */
++  if (result == 0 && (data->flags & FTW_DEPTH))
++    result = (*data->func) (data->dirbuf, st, FTW_DP, &data->ftw);
++
+   return result;
+ }
+ 
+diff --git a/test/misc/tst-nftw.c b/test/misc/tst-nftw.c
+new file mode 100644
+--- /dev/null
++++ b/test/misc/tst-nftw.c
+@@ -0,0 +1,60 @@
++#define _XOPEN_SOURCE 500 
++#ifndef _GNU_SOURCE
++#define _GNU_SOURCE
++#endif
++
++#include <ftw.h>
++#include <stdio.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++#include <unistd.h>
++
++int result = 0;
++
++static int process_one_entry(const char *fpath, const struct stat *sb,
++                             int typeflag, struct FTW *ftwbuf)
++{
++    
++    struct stat buf;
++    const char *rel_path = fpath+ftwbuf->base;
++
++    printf("Processing %s in working dir %s\n",
++	   rel_path, get_current_dir_name());
++    if (stat(rel_path, &buf) < 0) {
++	perror("Oops...relative path does not exist in current directory");
++	result = 1;
++    }
++}
++
++static int
++do_test(void)
++{
++    char *path = "/tmp/stest_dir";
++    char *subpath = "/tmp/stest_dir/d1";
++    char *filepath = "/tmp/stest_dir/f1";
++    char *filesubpath = "/tmp/stest_dir/d1/f2";
++    
++    if ((mkdir(path, 0700)) < 0)
++	perror("Creating path");
++    if ((mkdir(subpath, 0700)) < 0)
++	perror("Creating subpath");
++    if ((open(filepath, O_CREAT)) < 0)
++	perror("Opening filepath");
++    if ((open(filesubpath, O_CREAT)) < 0)
++	perror("Opening filesubpath");
++
++    if (nftw(path, process_one_entry, 100, (FTW_CHDIR|FTW_DEPTH|FTW_PHYS)) < 0)
++        perror("ntfw");
++
++    unlink(filesubpath);
++    unlink(filepath);
++    rmdir(subpath);
++    rmdir(path);
++
++    return result;
++}
++
++#define TIMEOUT 5
++#define TEST_FUNCTION do_test ()
++#include "../test-skeleton.c"
+-- 
