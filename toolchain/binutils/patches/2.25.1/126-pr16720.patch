@@ -1,0 +1,27 @@
+From: Ma Jiang <ma.jiang@zte.com.cn>
+Date: Thu, 1 Dec 2016 12:21:30 +0000
+Subject: Fix handling of MIPS16 HI16 relocs.
+
+[ Upstream 40a0bfddf0 ]
+
+	PR ld/16720
+	* elfxx-mips.c (mips_elf_calculate_relocation): Remove overflow
+	test for HI16 relocs.
+
+
+Ref.: http://sourceware.org/bugzilla/show_bug.cgi?id=16720
+
+---
+
+diff --git a/bfd/elfxx-mips.c b/bfd/elfxx-mips.c
+--- a/bfd/elfxx-mips.c
++++ b/bfd/elfxx-mips.c
+@@ -5920,7 +5920,6 @@ mips_elf_calculate_relocation (bfd *abfd, bfd *input_bfd,
+ 	    value = mips_elf_high (addend + gp - p - 1);
+ 	  else
+ 	    value = mips_elf_high (addend + gp - p);
+-	  overflowed_p = mips_elf_overflow_p (value, 16);
+ 	}
+       break;
+ 
+-- 
