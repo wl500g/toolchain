@@ -1,0 +1,229 @@
+From: "Maciej W. Rozycki" <macro@imgtec.com>
+Date: Mon, 16 Jan 2017 22:10:57 +0000
+Subject: PR ld/20828: Fix linker script symbols wrongly forced local with section GC
+
+[ Upstream 81ff47b3a5 ]
+
+http://sourceware.org/bugzilla/show_bug.cgi?id=20828
+
+Fix a generic ELF linker regression introduced with a chain of changes
+made to unused input section garbage collection:
+
+- commit 1a766c6843ce ("Also hide symbols without PLT nor GOT
+  references."),
+  <https://sourceware.org/ml/binutils/2011-09/msg00076.html>,
+
+- commit 1d5316ab67e1 ("PR ld/13177: garbage collector retains zombie
+  references to external libraries"),
+  <https://sourceware.org/ml/binutils/2011-10/msg00161.html>,
+
+- commit 6673f753c019 ("Fix PR 12772, garbage collection of dynamic
+  syms"), <https://sourceware.org/ml/binutils/2011-12/msg00077.html>,
+
+causing the garbage collection of unused symbols present in a DSO
+involved in a link to make identically named symbols ordinarily defined
+(i.e. not hidden or PROVIDEd) by a linker script local, even though the
+latter symbols are supposed to be global as if no DSO defined them as
+well.
+
+This is because linker script assignments are processed very late as
+`lang_process' proceeds, down in the call to `ldemul_before_allocation',
+which is made after the call to `lang_gc_sections' to do input section
+garbage collecting.  Consequently if unused, then any such DSO-defined
+symbol has already been garbage-collected and internally marked local.
+It would ordinarily be removed from dynamic symbol table output, however
+a linker script assignment correctly replaces its original definition
+with the new one and enters it into the dynamic symbol table produced as
+it is supposed to be exported.  The original local marking is however
+retained making the symbol local in the dynamic symbol table and
+therefore not available externally.  This also causes a sorting problem
+with the MIPS target, which does not expect non-section local dynamic
+symbols to be output and produces an invalid binary.
+
+Fix the problem then, by removing the `forced_local' marking for the
+offending case and add suitable test cases.  First to verify that unused
+symbols ordinarily defined with linker script assignments remain
+exported in the context of input section garbage collection whether or
+not a DSO defining identically named symbols is present in the link.
+Second that a linker version script still correctly retains or removes
+such symbols as requested.
+
+	bfd/
+	PR ld/20828
+	* elflink.c (bfd_elf_record_link_assignment): Clear any
+	`forced_local' marking for DSO symbols that are not being
+	provided.
+
+	ld/
+	PR ld/20828
+	* testsuite/ld-elf/pr20828-1.sd: New test.
+	* testsuite/ld-elf/pr20828-2a.sd: New test.
+	* testsuite/ld-elf/pr20828-2b.sd: New test.
+	* testsuite/ld-elf/pr20828.ld: New test linker script.
+	* testsuite/ld-elf/pr20828.ver: New test version script.
+	* testsuite/ld-elf/pr20828.s: New test source.
+	* testsuite/ld-elf/shared.exp: Run the new test.
+---
+
+diff --git a/bfd/elflink.c b/bfd/elflink.c
+--- a/bfd/elflink.c
++++ b/bfd/elflink.c
+@@ -671,12 +671,17 @@ bfd_elf_record_link_assignment (bfd *output_bfd,
+ 
+   /* If this symbol is not being provided by the linker script, and it is
+      currently defined by a dynamic object, but not by a regular object,
+-     then clear out any version information because the symbol will not be
+-     associated with the dynamic object any more.  */
++     then undo any forced local marking that may have been set by input
++     section garbage collection and clear out any version information
++     because the symbol will not be associated with the dynamic object
++     any more.  */
+   if (!provide
+       && h->def_dynamic
+       && !h->def_regular)
+-    h->verinfo.verdef = NULL;
++    {
++      h->forced_local = 0;
++      h->verinfo.verdef = NULL;
++    }
+ 
+   h->def_regular = 1;
+ 
+diff --git a/ld/testsuite/ld-elf/pr20828-1.sd b/ld/testsuite/ld-elf/pr20828-1.sd
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-elf/pr20828-1.sd
+@@ -0,0 +1,12 @@
++# Make sure symbols are global rather than local in the dynamic symbol table,
++# e.g.:
++#    Num:    Value  Size Type    Bind   Vis      Ndx Name
++#      1: 00000000     0 NOTYPE  GLOBAL DEFAULT    1 _fdata
++#      2: 00000000     0 NOTYPE  GLOBAL DEFAULT    1 _edata
++# vs:
++#      1: 00000000     0 NOTYPE  LOCAL  DEFAULT    1 _fdata
++#      2: 00000000     0 NOTYPE  LOCAL  DEFAULT    1 _edata
++#...
++ *[0-9]+: +[0-9a-f]+ +0 +NOTYPE +GLOBAL +DEFAULT +[0-9]+ +_fdata
++ *[0-9]+: +[0-9a-f]+ +0 +NOTYPE +GLOBAL +DEFAULT +[0-9]+ +_edata
++#pass
+diff --git a/ld/testsuite/ld-elf/pr20828-2a.sd b/ld/testsuite/ld-elf/pr20828-2a.sd
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-elf/pr20828-2a.sd
+@@ -0,0 +1,9 @@
++# Make sure `_edata' is global rather than local in the dynamic symbol table,
++# e.g.:
++#    Num:    Value  Size Type    Bind   Vis      Ndx Name
++#      1: 00000000     0 NOTYPE  GLOBAL DEFAULT    1 _edata
++# vs:
++#      1: 00000000     0 NOTYPE  LOCAL  DEFAULT    1 _edata
++#...
++ *[0-9]+: +[0-9a-f]+ +0 +NOTYPE +GLOBAL +DEFAULT +[0-9]+ +_edata
++#pass
+diff --git a/ld/testsuite/ld-elf/pr20828-2b.sd b/ld/testsuite/ld-elf/pr20828-2b.sd
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-elf/pr20828-2b.sd
+@@ -0,0 +1,7 @@
++# Make sure no `_fdata' is present in the dynamic symbol table, e.g.:
++#    Num:    Value  Size Type    Bind   Vis      Ndx Name
++#      1: 00000000     0 NOTYPE  LOCAL  DEFAULT    1 _fdata
++#failif
++#...
++.+ +_fdata
++#pass
+diff --git a/ld/testsuite/ld-elf/pr20828.ld b/ld/testsuite/ld-elf/pr20828.ld
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-elf/pr20828.ld
+@@ -0,0 +1,19 @@
++SECTIONS
++{
++  .data :
++  {
++    _fdata = .;
++    *(.data)
++    _edata = .;
++  }
++  .dynamic : { *(.dynamic) }
++  .hash : { *(.hash) }
++  .dynsym : { *(.dynsym) }
++  .dynstr : { *(.dynstr) }
++  .shstrtab : { *(.shstrtab) }
++  .symtab : { *(.symtab) }
++  .strtab : { *(.strtab) }
++  .got.plt : { *(.got.plt) }
++  .got : { *(.got) }
++  /DISCARD/ : { *(*) }
++}
+diff --git a/ld/testsuite/ld-elf/pr20828.s b/ld/testsuite/ld-elf/pr20828.s
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-elf/pr20828.s
+@@ -0,0 +1,2 @@
++	.data
++	.byte	0
+diff --git a/ld/testsuite/ld-elf/pr20828.ver b/ld/testsuite/ld-elf/pr20828.ver
+new file mode 100644
+--- /dev/null
++++ b/ld/testsuite/ld-elf/pr20828.ver
+@@ -0,0 +1 @@
++{ global: _edata; local: *; };
+diff --git a/ld/testsuite/ld-elf/shared.exp b/ld/testsuite/ld-elf/shared.exp
+--- a/ld/testsuite/ld-elf/shared.exp
++++ b/ld/testsuite/ld-elf/shared.exp
+@@ -31,6 +31,53 @@ if ![check_shared_lib_support] {
+     return
+ }
+ 
++# This target requires extra GAS options when building code for shared
++# libraries.
++set AFLAGS_PIC ""
++if [istarget "tic6x-*-*"] {
++    append AFLAGS_PIC " -mpic -mpid=near"
++}
++# This target requires a non-default emulation for successful shared
++# library/executable builds.
++set LFLAGS ""
++if [istarget "tic6x-*-*"] {
++    append LFLAGS " -melf32_tic6x_le"
++}
++
++# PR ld/20828 check for correct dynamic symbol table entries where:
++# - symbols have been defined with a linker script,
++# - the same symbols have been seen in shared library used in the link,
++# - the shared library symbols have been swept in section garbage collection.
++# Verify that the symbols are global rather than local and that a version
++# script adjusts them accordingly.
++if { [check_gc_sections_available] } {
++    run_ld_link_tests [list \
++	[list \
++	    "PR ld/20828 dynamic symbols with section GC\
++	      (auxiliary shared library)" \
++	     "$LFLAGS -shared --gc-sections -T pr20828.ld" "" "$AFLAGS_PIC" \
++	     {pr20828.s} \
++	     {{readelf --dyn-syms pr20828-1.sd}} \
++	     "libpr20828.so"] \
++	[list \
++	    "PR ld/20828 dynamic symbols with section GC (plain)" \
++	     "$LFLAGS -shared --gc-sections -T pr20828.ld" \
++	     "tmpdir/libpr20828.so" "$AFLAGS_PIC" \
++	     {pr20828.s} \
++	     {{readelf --dyn-syms pr20828-1.sd}} \
++	     "pr20828-1.so"] \
++	[list \
++	    "PR ld/20828 dynamic symbols with section GC (version script)" \
++	     "$LFLAGS -shared --gc-sections -T pr20828.ld\
++	      --version-script=pr20828.ver" \
++	     "tmpdir/libpr20828.so" \
++	     "$AFLAGS_PIC" \
++	     {pr20828.s} \
++	     {{readelf --dyn-syms pr20828-2a.sd} \
++	      {readelf --dyn-syms pr20828-2b.sd}} \
++	     "pr20828-2.so"]]
++}
++
+ # Check to see if the C compiler works
+ if { [which $CC] == 0 } {
+     return
+-- 
