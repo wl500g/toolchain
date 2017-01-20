@@ -168,12 +168,11 @@ foreach my $mirror (@ARGV) {
 	}
 }
 
-while (!$ok) {
+while (!-f "$target/$filename") {
 	my $mirror = shift @mirrors;
 	$mirror or die "No more mirrors to try - giving up.\n";
 
 	download($mirror);
-	-f "$target/$filename" and $ok = 1;
 }
 
 $SIG{INT} = \&cleanup;
