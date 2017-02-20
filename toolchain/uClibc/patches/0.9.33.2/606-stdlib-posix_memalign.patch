@@ -1,0 +1,31 @@
+From: Kito Cheng <kito.cheng@gmail.com>
+Date: Thu, 23 Feb 2017 17:16:28 +0800
+Subject: Only set *memptr when success for posix_memalign
+
+[ uClibc-ng 058c263f6b ]
+
+Follow glibc/musl behavior.
+
+---
+ libc/stdlib/posix_memalign.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/libc/stdlib/posix_memalign.c b/libc/stdlib/posix_memalign.c
+--- a/libc/stdlib/posix_memalign.c
++++ b/libc/stdlib/posix_memalign.c
+@@ -34,8 +34,10 @@ int posix_memalign(void **memptr, size_t alignment, size_t size)
+ 	     || alignment == 0
+ 	     */
+ 		return EINVAL;
+-
+-	*memptr = memalign(alignment, size);
+-
+-	return (*memptr != NULL ? 0 : ENOMEM);
++	void *mem = memalign(alignment, size);
++	if (mem != NULL) {
++		*memptr = mem;
++		return 0;
++	} else
++		return ENOMEM;
+ }
+-- 
