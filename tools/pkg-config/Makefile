@@ -1,5 +1,5 @@
 # 
-# Copyright (C) 2006 OpenWrt.org
+# Copyright (C) 2006-2013 OpenWrt.org
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
@@ -7,17 +7,17 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=pkg-config
-PKG_VERSION:=0.22
+PKG_VERSION:=0.28
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=http://pkgconfig.freedesktop.org/releases/
-PKG_MD5SUM:=fd5c547e9d66ba49bc735ccb8c791f2a
+PKG_MD5SUM:=aa3c86e67551adc3ac865160e34a2a0d
 
 include $(INCLUDE_DIR)/host-build.mk
 
-define Build/Compile
-	$(MAKE) -C $(PKG_BUILD_DIR)
-endef
+unexport PKG_CONFIG
+
+HOST_CONFIGURE_ARGS += --with-internal-glib
 
 define Build/Install
 	$(MAKE) -C $(PKG_BUILD_DIR) \
