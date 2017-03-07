@@ -8,13 +8,14 @@
 
 PREP_MK= OPENWRT_BUILD= QUIET=0
 
+export IS_TTY=$(shell tty -s && echo 1 || echo 0)
+
 include $(TOPDIR)/include/verbose.mk
 
 REVISION:=$(shell $(TOPDIR)/scripts/getver.sh)
 
 TOOLCHAINVERSION:=$(REVISION)
 export TOOLCHAINVERSION
-export IS_TTY=$(shell tty -s && echo 1 || echo 0)
 
 ifeq ($(FORCE),)
   .config scripts/config/conf scripts/config/mconf: staging_dir/host/.prereq-build
@@ -93,7 +94,7 @@ prereq:: .config
 	@( \
 		./scripts/config/conf --defconfig=.config --oldnoconfig -w tmp/.config Config.in > /dev/null 2>&1; \
 		if ./scripts/kconfig.pl '>' .config tmp/.config | grep -q CONFIG; then \
-			echo "WARNING: your configuration is out of sync. Please run make menuconfig, oldconfig or defconfig!"; \
+			printf "$(_R)WARNING: your configuration is out of sync. Please run make menuconfig, oldconfig or defconfig!$(_N)\n" >&2; \
 		fi; \
 		rm -f tmp/.config \
 	)
