@@ -4,7 +4,6 @@
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
 #
-# $Id:$
 
 ifeq ($(NO_TRACE_MAKE),)
 NO_TRACE_MAKE := $(MAKE) V=99
@@ -28,7 +27,7 @@ endif
 
 ifneq ($(KBUILD_VERBOSE),99)
   define MESSAGE
-	printf "$(_Y)%s$(_N)\n" "$(1)" >&254
+	printf "$(_Y)%s$(_N)\n" "$(1)" >&8
   endef
 
   define ERROR_MESSAGE
@@ -52,7 +51,7 @@ ifneq ($(KBUILD_VERBOSE),99)
       SILENT:=
     endif
     export QUIET:=1
-    SUBMAKE=cmd() { $(SILENT) $(MAKE) -s $$* < /dev/null || { echo "make $$*: build failed. Please re-run make with V=99 to see what's going on"; false; } } 254>&1 255>&2; cmd
+    SUBMAKE=cmd() { $(SILENT) $(MAKE) -s $$* < /dev/null || { echo "make $$*: build failed. Please re-run make with V=99 to see what's going on"; false; } } 8>&1 9>&2; cmd
   endif
 
   .SILENT: $(MAKECMDGOALS)
