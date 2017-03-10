@@ -1,6 +1,8 @@
-MIPS: Disable XLP due to memory hog in `xlp_fpu' automaton
+[MIPS] Disable XLP due to memory hog in `xlp_fpu' automaton
 
  genautomata tries to alloc >512Mb RAM for `xlp_fpu' automaton.
+
+ PR target/77510
 
  TODO: Need to fix xlp.md for permanent solution.
 
