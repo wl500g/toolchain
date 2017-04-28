@@ -46,11 +46,6 @@ $(TMP_DIR)/.host.mk: $(TOPDIR)/include/host.mk
 		[ -n "$$FIND" -a -x "$$FIND" ] || FIND=`which find 2>/dev/null`; \
 		echo "FIND:=$$FIND" >> $@; \
 		echo "BASH:=$(shell which bash)" >> $@; \
-		if find -L /tmp -maxdepth 0 >/dev/null 2>/dev/null; then \
-			echo 'FIND_L=find -L $$(1)' >>$@; \
-		else \
-			echo 'FIND_L=find $$(1) -follow' >> $@; \
-		fi; \
 	)
 
 endif
