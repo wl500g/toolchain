@@ -1,11 +1,15 @@
 ldso: Upstream updates
 
+uClibc.org commits
  f9946285 libdl.c,dl-string.h: do not use inlined _dl_memset and others in libdl
  100ad375 dl-elf.h: remove unused prototype
  1130df6d dl-hash.h: remove unused _dl_symbol and unneeded prototypes
  b57e9640 ldso/libdl: Also include dl-tls.h for for !SHARED.
  ea269ccb ldso: silence warnings in debug code
  54979ed7 libdl: fix unused variable warning
+
+uClibc-ng commits
+ 60d5a1ad24 Same iteration variable used for inner and outer loop
 
 ---
 diff --git a/ldso/include/dl-elf.h b/ldso/include/dl-elf.h
@@ -183,6 +187,22 @@ diff --git a/ldso/ldso/dl-elf.c b/ldso/ldso/dl-elf.c
 diff --git a/ldso/ldso/ldso.c b/ldso/ldso/ldso.c
 --- a/ldso/ldso/ldso.c
 +++ b/ldso/ldso/ldso.c
+@@ -660,12 +660,13 @@ of this helper program; chances are you did not intend to run this program.\n\
+ 			 * dynamic linking.  We can set the protection back
+ 			 * again once we are done.
+ 			 */
+-			_dl_debug_early("calling mprotect on the application program\n");
+ 			/* Now cover the application program. */
+ 			if (app_tpnt->dynamic_info[DT_TEXTREL]) {
++				int j;
+ 				ElfW(Phdr) *ppnt_outer = ppnt;
++				_dl_debug_early("calling mprotect on the application program\n");
+ 				ppnt = (ElfW(Phdr) *) auxvt[AT_PHDR].a_un.a_val;
+-				for (i = 0; i < auxvt[AT_PHNUM].a_un.a_val; i++, ppnt++) {
++				for (j = 0; j < auxvt[AT_PHNUM].a_un.a_val; j++, ppnt++) {
+ 					if (ppnt->p_type == PT_LOAD && !(ppnt->p_flags & PF_W))
+ 						_dl_mprotect((void *) (DL_RELOC_ADDR(app_tpnt->loadaddr, ppnt->p_vaddr) & PAGE_ALIGN),
+ 							     (DL_RELOC_ADDR(app_tpnt->loadaddr, ppnt->p_vaddr) & ADDR_ALIGN) +
 @@ -751,7 +751,8 @@ of this helper program; chances are you did not intend to run this program.\n\
  	 * case the executable is actually an ET_DYN object.
  	 */
