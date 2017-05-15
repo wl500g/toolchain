@@ -1,0 +1,102 @@
+From: Sergey Korolev <s.korolev@ndmsystems.com>
+Date: Tue, 25 Apr 2017 02:14:59 +0300
+Subject: pthread_getcpuclockid.c: fix clockid computation
+
+[ uClibc-ng commit be6a02b9a0 ]
+
+For the linux kernel (since 2.6.12) MAKE_THREAD_CPUCLOCK
+macro-like computation should be used to get clockid.
+
+---
+ libpthread/nptl/sysdeps/unix/sysv/linux/pthread_getcpuclockid.c |    5 +
+ test/nptl/Makefile.in                                           |    4 -
+ test/nptl/tst-clockid.c                                         |   37 ++++++++++
+ 3 files changed, 44 insertions(+), 2 deletions(-)
+ create mode 100644 test/nptl/tst-clockid.c
+
+diff --git a/libpthread/nptl/sysdeps/unix/sysv/linux/pthread_getcpuclockid.c b/libpthread/nptl/sysdeps/unix/sysv/linux/pthread_getcpuclockid.c
+--- a/libpthread/nptl/sysdeps/unix/sysv/linux/pthread_getcpuclockid.c
++++ b/libpthread/nptl/sysdeps/unix/sysv/linux/pthread_getcpuclockid.c
+@@ -20,6 +20,8 @@
+ #include <sys/time.h>
+ #include <tls.h>
+ 
++#define CPUCLOCK_PERTHREAD_MASK	4
++#define CPUCLOCK_SCHED		2
+ 
+ int
+ pthread_getcpuclockid (
+@@ -46,7 +48,8 @@ pthread_getcpuclockid (
+     return ERANGE;
+ 
+   /* Store the number.  */
+-  *clockid = CLOCK_THREAD_CPUTIME_ID | (pd->tid << CLOCK_IDFIELD_SIZE);
++  *clockid = ((~(clockid_t) (pd->tid)) << CLOCK_IDFIELD_SIZE)
++    | CPUCLOCK_SCHED | CPUCLOCK_PERTHREAD_MASK;
+ 
+   return 0;
+ #else
+diff --git a/test/nptl/Makefile.in b/test/nptl/Makefile.in
+--- a/test/nptl/Makefile.in
++++ b/test/nptl/Makefile.in
+@@ -43,7 +43,8 @@ TESTS := tst-align tst-align2 tst-atfork1 tst-attr1 tst-attr2 tst-attr3	\
+ 	tst-atfork2 tst-basic7 tst-fini1 tst-signal7 \
+ 	tst-unload tst-vfork1x tst-vfork2x tst-sem10 tst-sem11 tst-sem12 \
+ 	tst-typesizes tst-initializers1-c89 tst-initializers1-c99 \
+-	tst-initializers1-gnu89 tst-initializers1-gnu99
++	tst-initializers1-gnu89 tst-initializers1-gnu99 \
++	tst-clockid
+ 
+ #
+ # These are for the RT library and POSIX timers.
+@@ -109,6 +110,7 @@ LDFLAGS_tst-cond19 = -lrt
+ LDFLAGS_tst-cancel18 = -lrt
+ LDFLAGS_tst-cancelx18 = -lrt
+ LDFLAGS_tst-clock2 = -lrt
++LDFLAGS_tst-clockid = -lrt
+ LDFLAGS_tst-rwlock14 = -lrt
+ LDFLAGS_tst-fini1 = -Wl,-rpath=./ tst-fini1mod.so
+ LDFLAGS_tst-fini1mod.so = -Wl,-soname=tst-fini1mod.so
+diff --git a/test/nptl/tst-clockid.c b/test/nptl/tst-clockid.c
+new file mode 100644
+--- /dev/null
++++ b/test/nptl/tst-clockid.c
+@@ -0,0 +1,37 @@
++/*
++ * Copyright (C) 2017 Sergey Korolev <s.korolev@ndmsystems.com>
++ * Licensed under the LGPL v2.1, see the file COPYING.LIB in this tarball.
++ */
++
++#include <time.h>
++#include <errno.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <pthread.h>
++
++int do_test (void)
++{
++    clockid_t clk;
++    struct timespec ts;
++    const int err = pthread_getcpuclockid(pthread_self(), &clk);
++
++    if (err != 0) {
++        errno = err;
++        perror("pthread_getcpuclockid");
++        return EXIT_FAILURE;
++    }
++
++    if (clock_gettime(clk, &ts) == -1) {
++        perror("clock_gettime");
++        return EXIT_FAILURE;
++    }                                                                                                                                      
++
++    printf("Thread time is %lu.%06lu.\n",
++           ts.tv_sec,
++           ts.tv_nsec / 1000);
++
++    return EXIT_SUCCESS;
++}
++
++#define TEST_FUNCTION do_test ()
++#include "../test-skeleton.c"
+-- 
