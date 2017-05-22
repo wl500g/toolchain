@@ -3,6 +3,7 @@ buildsys: Upstream fixes
  9058b435 buildsys: try to merge all constants
  5fe8fc1a buildsys: Do not build crt upon pregen
  143b7505 nptl: rephrase *.sym handling
+ 8d15cd67 nptl: fix exclusion of pthread_setconcurrency.c
  3010966c buildsys: swap V=1 with V=2 command printing
  a58f1e2a buildsys: remove some obsolete optimization CFLAGS
  561ce7fb buildsys: prune pthread bits from arch headers
@@ -246,6 +247,15 @@ diff --git a/libc/sysdeps/linux/Makefile.commonarch b/libc/sysdeps/linux/Makefil
 diff --git a/libpthread/nptl/Makefile.in b/libpthread/nptl/Makefile.in
 --- a/libpthread/nptl/Makefile.in
 +++ b/libpthread/nptl/Makefile.in
+@@ -21,7 +21,7 @@ libpthread-routines- += allocatestack.c # dummy included by pthread_create.c
+ libpthread-routines- += pthread_mutex_getprioceiling.c pthread_mutex_setprioceiling.c # XXX: delete those or use them!
+ libpthread-routines-$(UCLIBC_HAS_RESOLVER_SUPPORT) += res.c
+ libpthread-routines-$(UCLIBC_SUSV4_LEGACY) += pthread_getconcurrency.c \
+-	pthread_setconcurrency
++	pthread_setconcurrency.c
+ libpthread_CSRC = $(filter-out $(libpthread-routines-) \
+ 		  		$(libc-shared-routines-y) \
+ 		  		$(libc-static-routines-y) \
 @@ -92,19 +92,12 @@ $(top_builddir)lib/libpthread.a: $(libpthread-a-y)
  	$(Q)$(RM) $@
  	$(do_ar)

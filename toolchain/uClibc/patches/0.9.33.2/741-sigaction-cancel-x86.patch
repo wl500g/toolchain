@@ -1,0 +1,70 @@
+i386/x86_64: fix pthread_cancel lead to segmentation fault
+
+---
+From d183d93e47ad16bc9983107a419121b02e0da51e
+From: KP.Kirchdoerfer <kapeka@bering-uclibc.de>
+Date: Wed, 17 May 2017 11:07:36 +0200
+Subject: x86: fix segfaults on SMP machine
+
+As reported by Bering-uClibc project uClibc-ng for x86
+generates a segfault on SMP machines when trying to run ntpd.
+
+A small test case is here: https://gist.github.com/ddrown
+
+Use a similar nop instruction as for x86_64 in the code.
+---
+
+From 1608819110a4f2a40c3781a9c4b8a8f4b2cea69a
+From: Zhang Pu <glen4linux@gmail.com>
+Date: Wed, 21 May 2014 00:52:55 +0800
+Subject: fix pthread_cancel lead to segmentation fault for x86_64.
+
+When x86_64 cpu contains 'cpu_has_xsave' flag(in kernel),call the
+pthread_cancel will have a segmentation fault. Because gcc could
+not find the end of stack in user signal stack.
+---
+
+diff --git a/libc/sysdeps/linux/i386/sigaction.c b/libc/sysdeps/linux/i386/sigaction.c
+--- a/libc/sysdeps/linux/i386/sigaction.c
++++ b/libc/sysdeps/linux/i386/sigaction.c
+@@ -115,6 +115,7 @@ libc_hidden_weak(sigaction)
+ /* The return code for realtime-signals.  */
+ # define RESTORE2(name, syscall) \
+ __asm__	(						\
++	"nop\n"						\
+ 	".text\n"					\
+ 	"__" #name ":\n"				\
+ 	"	movl	$" #syscall ", %eax\n"		\
+@@ -128,6 +129,7 @@ RESTORE(restore_rt, __NR_rt_sigreturn)
+ # undef RESTORE2
+ # define RESTORE2(name, syscall) \
+ __asm__ (						\
++	"nop\n"						\
+ 	".text\n"					\
+ 	"__" #name ":\n"				\
+ 	"	popl	%eax\n"				\
+diff --git a/libc/sysdeps/linux/x86_64/sigaction.c b/libc/sysdeps/linux/x86_64/sigaction.c
+--- a/libc/sysdeps/linux/x86_64/sigaction.c
++++ b/libc/sysdeps/linux/x86_64/sigaction.c
+@@ -111,11 +111,19 @@ libc_hidden_weak(sigaction)
+    signal handlers work right.  Important are both the names
+    (__restore_rt) and the exact instruction sequence.
+    If you ever feel the need to make any changes, please notify the
+-   appropriate GDB maintainer.  */
++   appropriate GDB maintainer.
++
++   The unwind information starts a byte before __restore_rt, so that
++   it is found when unwinding, to get an address the unwinder assumes
++   will be in the middle of a call instruction.  See the Linux kernel
++   (the i386 vsyscall, in particular) for an explanation of the complex
++   unwind information used here in order to get the traditional CFA.
++ */
+ 
+ #define RESTORE(name, syscall) RESTORE2(name, syscall)
+ #define RESTORE2(name, syscall) \
+ __asm__ (						\
++	"nop\n"						\
+ 	".text\n"					\
+ 	"__" #name ":\n"				\
+ 	"	movq	$" #syscall ", %rax\n"		\
+-- 
