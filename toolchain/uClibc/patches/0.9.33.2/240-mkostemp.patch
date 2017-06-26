@@ -3,6 +3,7 @@ libc/stdlib: add mkostemp helpers
  42d1b23fc0 libc/stdlib: add mkostemp helpers
  5084cf8b6b stdlib: Fix fndecl of mkostemp, mkostemp64
  638a23483b mkostemp: fix implementation
+ 8976b42181 Fix mkostemp64 creation mode.
 
 ---
 diff --git a/include/stdlib.h b/include/stdlib.h
@@ -240,7 +241,7 @@ new file mode 100644
 +int
 +mkostemp64 (char *template, int flags)
 +{
-+  return __gen_tempname (template, __GT_BIGFILE, flags | O_LARGEFILE, S_IRUSR | S_IWUSR | S_IXUSR);
++  return __gen_tempname (template, __GT_BIGFILE, flags | O_LARGEFILE, S_IRUSR | S_IWUSR);
 +}
 diff --git a/libc/stdlib/mkstemp.c b/libc/stdlib/mkstemp.c
 --- a/libc/stdlib/mkstemp.c
