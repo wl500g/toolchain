@@ -1,0 +1,57 @@
+diff -Naurd mpfr-3.1.5-a/PATCHES mpfr-3.1.5-b/PATCHES
+--- mpfr-3.1.5-a/PATCHES	2017-06-06 19:50:30.708438500 +0000
++++ mpfr-3.1.5-b/PATCHES	2017-06-06 19:50:30.736438175 +0000
+@@ -0,0 +1 @@
++tests-buffer-size
+diff -Naurd mpfr-3.1.5-a/VERSION mpfr-3.1.5-b/VERSION
+--- mpfr-3.1.5-a/VERSION	2017-06-06 19:21:17.604843293 +0000
++++ mpfr-3.1.5-b/VERSION	2017-06-06 19:50:30.736438175 +0000
+@@ -1 +1 @@
+-3.1.5-p3
++3.1.5-p4
+diff -Naurd mpfr-3.1.5-a/src/mpfr.h mpfr-3.1.5-b/src/mpfr.h
+--- mpfr-3.1.5-a/src/mpfr.h	2017-06-06 19:21:17.600843340 +0000
++++ mpfr-3.1.5-b/src/mpfr.h	2017-06-06 19:50:30.732438221 +0000
+@@ -27,7 +27,7 @@
+ #define MPFR_VERSION_MAJOR 3
+ #define MPFR_VERSION_MINOR 1
+ #define MPFR_VERSION_PATCHLEVEL 5
+-#define MPFR_VERSION_STRING "3.1.5-p3"
++#define MPFR_VERSION_STRING "3.1.5-p4"
+ 
+ /* Macros dealing with MPFR VERSION */
+ #define MPFR_VERSION_NUM(a,b,c) (((a) << 16L) | ((b) << 8) | (c))
+diff -Naurd mpfr-3.1.5-a/src/version.c mpfr-3.1.5-b/src/version.c
+--- mpfr-3.1.5-a/src/version.c	2017-06-06 19:21:17.604843293 +0000
++++ mpfr-3.1.5-b/src/version.c	2017-06-06 19:50:30.736438175 +0000
+@@ -25,5 +25,5 @@
+ const char *
+ mpfr_get_version (void)
+ {
+-  return "3.1.5-p3";
++  return "3.1.5-p4";
+ }
+diff -Naurd mpfr-3.1.5-a/tests/tl2b.c mpfr-3.1.5-b/tests/tl2b.c
+--- mpfr-3.1.5-a/tests/tl2b.c	2016-09-27 07:58:14.000000000 +0000
++++ mpfr-3.1.5-b/tests/tl2b.c	2017-06-06 19:50:30.724438314 +0000
+@@ -83,7 +83,7 @@
+   mpfr_srcptr t;
+   int beta, i;
+   int error = 0;
+-  char buffer[30];
++  char buffer[256];  /* larger than needed, for maintainability */
+ 
+   for (beta = 2; beta <= BASE_MAX; beta++)
+     {
+diff -Naurd mpfr-3.1.5-a/tests/tpow_all.c mpfr-3.1.5-b/tests/tpow_all.c
+--- mpfr-3.1.5-a/tests/tpow_all.c	2016-09-27 07:58:14.000000000 +0000
++++ mpfr-3.1.5-b/tests/tpow_all.c	2017-06-06 19:50:30.724438314 +0000
+@@ -498,7 +498,7 @@
+   for (i = 0; i <= 12; i++)
+     {
+       unsigned int flags = 0;
+-      char sy[16];
++      char sy[256];  /* larger than needed, for maintainability */
+ 
+       /* Test 2^(emin - i/4).
+        * --> Underflow iff i > 4.

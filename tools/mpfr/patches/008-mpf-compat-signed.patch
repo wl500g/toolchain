@@ -1,0 +1,127 @@
+diff -Naurd mpfr-3.1.5-a/PATCHES mpfr-3.1.5-b/PATCHES
+--- mpfr-3.1.5-a/PATCHES	2017-06-06 20:31:35.919341495 +0000
++++ mpfr-3.1.5-b/PATCHES	2017-06-06 20:31:35.943341213 +0000
+@@ -0,0 +1 @@
++mpf-compat-signed
+diff -Naurd mpfr-3.1.5-a/VERSION mpfr-3.1.5-b/VERSION
+--- mpfr-3.1.5-a/VERSION	2017-06-06 20:24:00.604701719 +0000
++++ mpfr-3.1.5-b/VERSION	2017-06-06 20:31:35.943341213 +0000
+@@ -1 +1 @@
+-3.1.5-p7
++3.1.5-p8
+diff -Naurd mpfr-3.1.5-a/src/mpf2mpfr.h mpfr-3.1.5-b/src/mpf2mpfr.h
+--- mpfr-3.1.5-a/src/mpf2mpfr.h	2016-09-27 07:58:15.000000000 +0000
++++ mpfr-3.1.5-b/src/mpf2mpfr.h	2017-06-06 20:31:35.931341353 +0000
+@@ -93,15 +93,15 @@
+ #undef mpf_div_2exp
+ #define mpf_div_2exp(x,y,z) mpfr_div_2exp(x,y,z,MPFR_DEFAULT_RND)
+ #undef mpf_fits_slong_p
+-#define mpf_fits_slong_p(x) mpfr_fits_ulong_p(x,MPFR_DEFAULT_RND)
++#define mpf_fits_slong_p(x) mpfr_fits_slong_p(x,MPFR_DEFAULT_RND)
+ #undef mpf_fits_ulong_p
+ #define mpf_fits_ulong_p(x) mpfr_fits_ulong_p(x,MPFR_DEFAULT_RND)
+ #undef mpf_fits_sint_p
+-#define mpf_fits_sint_p(x) mpfr_fits_uint_p(x,MPFR_DEFAULT_RND)
++#define mpf_fits_sint_p(x) mpfr_fits_sint_p(x,MPFR_DEFAULT_RND)
+ #undef mpf_fits_uint_p
+ #define mpf_fits_uint_p(x) mpfr_fits_uint_p(x,MPFR_DEFAULT_RND)
+ #undef mpf_fits_sshort_p
+-#define mpf_fits_sshort_p(x) mpfr_fits_ushort_p(x,MPFR_DEFAULT_RND)
++#define mpf_fits_sshort_p(x) mpfr_fits_sshort_p(x,MPFR_DEFAULT_RND)
+ #undef mpf_fits_ushort_p
+ #define mpf_fits_ushort_p(x) mpfr_fits_ushort_p(x,MPFR_DEFAULT_RND)
+ #undef mpf_get_str
+@@ -113,7 +113,7 @@
+ #undef mpf_get_ui
+ #define mpf_get_ui(x) mpfr_get_ui(x,MPFR_DEFAULT_RND)
+ #undef mpf_get_si
+-#define mpf_get_si(x) mpfr_get_ui(x,MPFR_DEFAULT_RND)
++#define mpf_get_si(x) mpfr_get_si(x,MPFR_DEFAULT_RND)
+ #undef mpf_inp_str
+ #define mpf_inp_str(x,y,z) mpfr_inp_str(x,y,z,MPFR_DEFAULT_RND)
+ #undef mpf_set_str
+diff -Naurd mpfr-3.1.5-a/src/mpfr-impl.h mpfr-3.1.5-b/src/mpfr-impl.h
+--- mpfr-3.1.5-a/src/mpfr-impl.h	2017-06-06 19:21:17.592843433 +0000
++++ mpfr-3.1.5-b/src/mpfr-impl.h	2017-06-06 20:31:35.931341353 +0000
+@@ -342,11 +342,15 @@
+ #define MPFR_FLAGS_DIVBY0 32
+ #define MPFR_FLAGS_ALL 63
+ 
+-/* Replace some common functions for direct access to the global vars */
+-#define mpfr_get_emin() (__gmpfr_emin + 0)
+-#define mpfr_get_emax() (__gmpfr_emax + 0)
+-#define mpfr_get_default_rounding_mode() (__gmpfr_default_rounding_mode + 0)
+-#define mpfr_get_default_prec() (__gmpfr_default_fp_bit_precision + 0)
++/* Replace some common functions for direct access to the global vars.
++   The casts prevent these macros from being used as a lvalue (and this
++   method makes sure that the expressions have the correct type). */
++#define mpfr_get_emin() ((mpfr_exp_t) __gmpfr_emin)
++#define mpfr_get_emax() ((mpfr_exp_t) __gmpfr_emax)
++#define mpfr_get_default_rounding_mode() \
++  ((mpfr_rnd_t) __gmpfr_default_rounding_mode)
++#define mpfr_get_default_prec() \
++  ((mpfr_prec_t) __gmpfr_default_fp_bit_precision)
+ 
+ #define mpfr_clear_flags() \
+   ((void) (__gmpfr_flags = 0))
+diff -Naurd mpfr-3.1.5-a/src/mpfr.h mpfr-3.1.5-b/src/mpfr.h
+--- mpfr-3.1.5-a/src/mpfr.h	2017-06-06 20:24:00.604701719 +0000
++++ mpfr-3.1.5-b/src/mpfr.h	2017-06-06 20:31:35.939341259 +0000
+@@ -27,7 +27,7 @@
+ #define MPFR_VERSION_MAJOR 3
+ #define MPFR_VERSION_MINOR 1
+ #define MPFR_VERSION_PATCHLEVEL 5
+-#define MPFR_VERSION_STRING "3.1.5-p7"
++#define MPFR_VERSION_STRING "3.1.5-p8"
+ 
+ /* Macros dealing with MPFR VERSION */
+ #define MPFR_VERSION_NUM(a,b,c) (((a) << 16L) | ((b) << 8) | (c))
+diff -Naurd mpfr-3.1.5-a/src/version.c mpfr-3.1.5-b/src/version.c
+--- mpfr-3.1.5-a/src/version.c	2017-06-06 20:24:00.604701719 +0000
++++ mpfr-3.1.5-b/src/version.c	2017-06-06 20:31:35.943341213 +0000
+@@ -25,5 +25,5 @@
+ const char *
+ mpfr_get_version (void)
+ {
+-  return "3.1.5-p7";
++  return "3.1.5-p8";
+ }
+diff -Naurd mpfr-3.1.5-a/tests/mpf_compat.h mpfr-3.1.5-b/tests/mpf_compat.h
+--- mpfr-3.1.5-a/tests/mpf_compat.h	2016-09-27 07:58:14.000000000 +0000
++++ mpfr-3.1.5-b/tests/mpf_compat.h	2017-06-06 20:31:35.931341353 +0000
+@@ -20,16 +20,10 @@
+ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+ 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
+ 
+-#if defined (__cplusplus)
+-#include <cstdio>
+-#else
+-#include <stdio.h>
+-#endif
+ #include <stdlib.h>
+-#include <string.h>
+ 
+-#include "gmp.h"
+-#include "mpfr.h"
++#include "mpfr-impl.h"
++
+ #ifdef MPFR
+ #include "mpf2mpfr.h"
+ #endif
+@@ -228,6 +222,16 @@
+       exit (1);
+     }
+ 
++  /* non-regression tests for bugs fixed in revision 11565 */
++  mpf_set_si (x, -1);
++  MPFR_ASSERTN(mpf_fits_ulong_p (x) == 0);
++  MPFR_ASSERTN(mpf_fits_slong_p (x) != 0);
++  MPFR_ASSERTN(mpf_fits_uint_p (x) == 0);
++  MPFR_ASSERTN(mpf_fits_sint_p (x) != 0);
++  MPFR_ASSERTN(mpf_fits_ushort_p (x) == 0);
++  MPFR_ASSERTN(mpf_fits_sshort_p (x) != 0);
++  MPFR_ASSERTN(mpf_get_si (x) == -1);
++
+   /* clear all variables */
+   mpf_clear (y);
+   mpf_clear (x);

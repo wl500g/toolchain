@@ -1,0 +1,112 @@
+diff -Naurd mpfr-3.1.5-a/PATCHES mpfr-3.1.5-b/PATCHES
+--- mpfr-3.1.5-a/PATCHES	2017-06-06 19:57:01.947910247 +0000
++++ mpfr-3.1.5-b/PATCHES	2017-06-06 19:57:01.971909970 +0000
+@@ -0,0 +1 @@
++vasprintf-overflow-check
+diff -Naurd mpfr-3.1.5-a/VERSION mpfr-3.1.5-b/VERSION
+--- mpfr-3.1.5-a/VERSION	2017-06-06 19:50:30.736438175 +0000
++++ mpfr-3.1.5-b/VERSION	2017-06-06 19:57:01.971909970 +0000
+@@ -1 +1 @@
+-3.1.5-p4
++3.1.5-p5
+diff -Naurd mpfr-3.1.5-a/src/mpfr.h mpfr-3.1.5-b/src/mpfr.h
+--- mpfr-3.1.5-a/src/mpfr.h	2017-06-06 19:50:30.732438221 +0000
++++ mpfr-3.1.5-b/src/mpfr.h	2017-06-06 19:57:01.971909970 +0000
+@@ -27,7 +27,7 @@
+ #define MPFR_VERSION_MAJOR 3
+ #define MPFR_VERSION_MINOR 1
+ #define MPFR_VERSION_PATCHLEVEL 5
+-#define MPFR_VERSION_STRING "3.1.5-p4"
++#define MPFR_VERSION_STRING "3.1.5-p5"
+ 
+ /* Macros dealing with MPFR VERSION */
+ #define MPFR_VERSION_NUM(a,b,c) (((a) << 16L) | ((b) << 8) | (c))
+diff -Naurd mpfr-3.1.5-a/src/vasprintf.c mpfr-3.1.5-b/src/vasprintf.c
+--- mpfr-3.1.5-a/src/vasprintf.c	2016-12-15 08:35:46.520430308 +0000
++++ mpfr-3.1.5-b/src/vasprintf.c	2017-06-06 19:57:01.963910062 +0000
+@@ -1452,7 +1452,7 @@
+                   struct printf_spec spec)
+ {
+   char *str;
+-  long total;
++  unsigned int total;  /* can hold the sum of two non-negative int's + 1 */
+   int uppercase;
+ 
+   /* WARNING: left justification means right space padding */
+@@ -1645,43 +1645,43 @@
+ 
+   /* compute the number of characters to be written verifying it is not too
+      much */
++
++#define INCR_TOTAL(v)                           \
++  do {                                          \
++    MPFR_ASSERTD ((v) >= 0);                    \
++    if (MPFR_UNLIKELY ((v) > INT_MAX))          \
++      goto error;                               \
++    total += (v);                               \
++    if (MPFR_UNLIKELY (total > INT_MAX))        \
++      goto error;                               \
++  } while (0)
++
+   total = np->sign ? 1 : 0;
+-  total += np->prefix_size;
+-  total += np->ip_size;
+-  if (MPFR_UNLIKELY (total < 0 || total > INT_MAX))
+-    goto error;
+-  total += np->ip_trailing_zeros;
+-  if (MPFR_UNLIKELY (total < 0 || total > INT_MAX))
+-    goto error;
++  INCR_TOTAL (np->prefix_size);
++  INCR_TOTAL (np->ip_size);
++  INCR_TOTAL (np->ip_trailing_zeros);
++  MPFR_ASSERTD (np->ip_size + np->ip_trailing_zeros >= 1);
+   if (np->thousands_sep)
+     /* ' flag, style f and the thousands separator in current locale is not
+        reduced to the null character */
+-    total += (np->ip_size + np->ip_trailing_zeros) / 3;
+-  if (MPFR_UNLIKELY (total < 0 || total > INT_MAX))
+-    goto error;
++    INCR_TOTAL ((np->ip_size + np->ip_trailing_zeros - 1) / 3);
+   if (np->point)
+     ++total;
+-  total += np->fp_leading_zeros;
+-  if (MPFR_UNLIKELY (total < 0 || total > INT_MAX))
+-    goto error;
+-  total += np->fp_size;
+-  if (MPFR_UNLIKELY (total < 0 || total > INT_MAX))
+-    goto error;
+-  total += np->fp_trailing_zeros;
+-  if (MPFR_UNLIKELY (total < 0 || total > INT_MAX))
+-    goto error;
+-  total += np->exp_size;
+-  if (MPFR_UNLIKELY (total < 0 || total > INT_MAX))
+-    goto error;
++  INCR_TOTAL (np->fp_leading_zeros);
++  INCR_TOTAL (np->fp_size);
++  INCR_TOTAL (np->fp_trailing_zeros);
++  INCR_TOTAL (np->exp_size);
+ 
+   if (spec.width > total)
+     /* pad with spaces or zeros depending on np->pad_type */
+     {
+       np->pad_size = spec.width - total;
+       total += np->pad_size; /* here total == spec.width,
+-                                so 0 < total < INT_MAX */
++                                so 0 < total <= INT_MAX */
++      MPFR_ASSERTD (total == spec.width);
+     }
+ 
++  MPFR_ASSERTD (total > 0 && total <= INT_MAX);
+   return total;
+ 
+  error:
+diff -Naurd mpfr-3.1.5-a/src/version.c mpfr-3.1.5-b/src/version.c
+--- mpfr-3.1.5-a/src/version.c	2017-06-06 19:50:30.736438175 +0000
++++ mpfr-3.1.5-b/src/version.c	2017-06-06 19:57:01.971909970 +0000
+@@ -25,5 +25,5 @@
+ const char *
+ mpfr_get_version (void)
+ {
+-  return "3.1.5-p4";
++  return "3.1.5-p5";
+ }

@@ -1,0 +1,45 @@
+diff -Naurd mpfr-3.1.5-a/PATCHES mpfr-3.1.5-b/PATCHES
+--- mpfr-3.1.5-a/PATCHES	2017-06-06 19:21:17.580843571 +0000
++++ mpfr-3.1.5-b/PATCHES	2017-06-06 19:21:17.604843293 +0000
+@@ -0,0 +1 @@
++ret-macro
+diff -Naurd mpfr-3.1.5-a/VERSION mpfr-3.1.5-b/VERSION
+--- mpfr-3.1.5-a/VERSION	2016-12-19 22:11:17.094676820 +0000
++++ mpfr-3.1.5-b/VERSION	2017-06-06 19:21:17.604843293 +0000
+@@ -1 +1 @@
+-3.1.5-p2
++3.1.5-p3
+diff -Naurd mpfr-3.1.5-a/src/mpfr-impl.h mpfr-3.1.5-b/src/mpfr-impl.h
+--- mpfr-3.1.5-a/src/mpfr-impl.h	2016-09-27 07:58:15.000000000 +0000
++++ mpfr-3.1.5-b/src/mpfr-impl.h	2017-06-06 19:21:17.592843433 +0000
+@@ -873,7 +873,7 @@
+    following two macros, unless the flag comes from another function
+    returning the ternary inexact value */
+ #define MPFR_RET(I) return \
+-  (I) ? ((__gmpfr_flags |= MPFR_FLAGS_INEXACT), (I)) : 0
++  (I) != 0 ? ((__gmpfr_flags |= MPFR_FLAGS_INEXACT), (I)) : 0
+ #define MPFR_RET_NAN return (__gmpfr_flags |= MPFR_FLAGS_NAN), 0
+ 
+ #define MPFR_SET_ERANGE() (__gmpfr_flags |= MPFR_FLAGS_ERANGE)
+diff -Naurd mpfr-3.1.5-a/src/mpfr.h mpfr-3.1.5-b/src/mpfr.h
+--- mpfr-3.1.5-a/src/mpfr.h	2016-12-19 22:11:17.090676815 +0000
++++ mpfr-3.1.5-b/src/mpfr.h	2017-06-06 19:21:17.600843340 +0000
+@@ -27,7 +27,7 @@
+ #define MPFR_VERSION_MAJOR 3
+ #define MPFR_VERSION_MINOR 1
+ #define MPFR_VERSION_PATCHLEVEL 5
+-#define MPFR_VERSION_STRING "3.1.5-p2"
++#define MPFR_VERSION_STRING "3.1.5-p3"
+ 
+ /* Macros dealing with MPFR VERSION */
+ #define MPFR_VERSION_NUM(a,b,c) (((a) << 16L) | ((b) << 8) | (c))
+diff -Naurd mpfr-3.1.5-a/src/version.c mpfr-3.1.5-b/src/version.c
+--- mpfr-3.1.5-a/src/version.c	2016-12-19 22:11:17.094676820 +0000
++++ mpfr-3.1.5-b/src/version.c	2017-06-06 19:21:17.604843293 +0000
+@@ -25,5 +25,5 @@
+ const char *
+ mpfr_get_version (void)
+ {
+-  return "3.1.5-p2";
++  return "3.1.5-p3";
+ }
